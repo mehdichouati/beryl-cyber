@@ -19,3 +19,7 @@ config/beryl-cyber.conf
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# Sauvegardes de la base (données privées)
+*.db.gz
+beryl-backups/

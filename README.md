@@ -47,6 +47,18 @@ ssh -t beryl sh /mnt/beryl/beryl-cyber/app/router/bin/set-password.sh   # mot de
 La configuration (poste d'administration, liste blanche, Discord) se trouve sur la clé :
 `/mnt/beryl/beryl-cyber/beryl-cyber.conf` (modèle : `config/beryl-cyber.conf.example`).
 
+## Sauvegarde
+
+`backup.sh` (Git Bash, sur le PC) copie la base du routeur dans `~/beryl-backups`, hors du dépôt.
+Lancé chaque jour par le Planificateur de tâches Windows, il ne sauvegarde que tous les 30 jours,
+garde les 12 dernières copies et compacte la base sur la clé.
+
+Restauration :
+```sh
+gunzip -c ~/beryl-backups/beryl-AAAA-MM-JJ.db.gz > beryl.db
+scp -O beryl.db beryl:/tmp/ && ssh beryl "/etc/init.d/beryl-cyber stop && rm -f /mnt/beryl/beryl-cyber/data/beryl.db-wal /mnt/beryl/beryl-cyber/data/beryl.db-shm && cp /tmp/beryl.db /mnt/beryl/beryl-cyber/data/beryl.db && /etc/init.d/beryl-cyber start"
+```
+
 ## Sécurité
 
 | Couche | Rôle |
