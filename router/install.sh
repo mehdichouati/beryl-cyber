@@ -47,6 +47,9 @@ cp "$APP/router/init.d/beryl-cyber" /etc/init.d/beryl-cyber
 chmod 755 /usr/sbin/beryl-cyber-launch /etc/init.d/beryl-cyber
 /etc/init.d/beryl-cyber enable
 
+step "Pare-feu du tableau de bord"
+sh "$APP/router/bin/firewall.sh"
+
 step "Protection contre les mises à jour du firmware"
 for f in /etc/init.d/beryl-cyber /usr/sbin/beryl-cyber-launch /etc/rc.d/S99beryl-cyber /etc/rc.d/K10beryl-cyber; do
     grep -qxF "$f" /etc/sysupgrade.conf 2>/dev/null || echo "$f" >> /etc/sysupgrade.conf

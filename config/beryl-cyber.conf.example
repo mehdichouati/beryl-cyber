@@ -11,3 +11,11 @@ COLLECT_INTERVAL=60
 
 # Délai sans réponse avant de considérer un appareil hors ligne (secondes)
 OFFLINE_AFTER=300
+
+# Poste d'administration : seul cet appareil peut ouvrir le tableau de bord.
+# Laisser vide pour ne pas restreindre l'accès (déconseillé).
+ADMIN_MAC=
+ADMIN_IP=
+
+# Port du tableau de bord
+WEB_PORT=8080
