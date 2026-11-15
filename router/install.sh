@@ -18,7 +18,7 @@ step() { echo "==> $*"; }
 # ps coupe les lignes à 80 caractères et le nom du script n'y apparaît pas en entier.
 collect_running() {
     for f in /proc/[0-9]*/cmdline; do
-        tr '\0' ' ' < "$f" 2>/dev/null | grep -q "[c]ollect.sh --loop" && return 0
+        tr '\0' ' ' 2>/dev/null < "$f" | grep -q "[c]ollect.sh --loop" && return 0
     done
     return 1
 }
@@ -51,7 +51,7 @@ step "Pare-feu du tableau de bord"
 sh "$APP/router/bin/firewall.sh"
 
 step "Protection contre les mises à jour du firmware"
-for f in /etc/init.d/beryl-cyber /usr/sbin/beryl-cyber-launch /etc/rc.d/S99beryl-cyber /etc/rc.d/K10beryl-cyber; do
+for f in /etc/init.d/beryl-cyber /usr/sbin/beryl-cyber-launch /etc/rc.d/S99beryl-cyber /etc/rc.d/K10beryl-cyber /etc/beryl-cyber/; do
     grep -qxF "$f" /etc/sysupgrade.conf 2>/dev/null || echo "$f" >> /etc/sysupgrade.conf
 done
 
@@ -64,14 +64,22 @@ collect_ok=0; web_ok=0; i=0
 while [ "$i" -lt 20 ]; do
     collect_running && collect_ok=1
     netstat -tln | grep -q ":8080 " && web_ok=1
-    [ "$collect_ok" = 1 ] && [ "$web_ok" = 1 ] && break
+    [ "$collect_ok" = 1 ] && { [ "$web_ok" = 1 ] || [ ! -s /etc/beryl-cyber/httpd.conf ]; } && break
     sleep 1
     i=$((i + 1))
 done
 
 ok=1
 [ "$collect_ok" = 1 ] && echo "    collecte : OK"        || { echo "    collecte : ARRÊTÉE"; ok=0; }
-[ "$web_ok" = 1 ]     && echo "    tableau de bord : OK" || { echo "    tableau de bord : ARRÊTÉ"; ok=0; }
+if [ ! -s /etc/beryl-cyber/httpd.conf ]; then
+    echo "    tableau de bord : en attente d'un mot de passe"
+    echo "    -> ssh -t beryl sh $APP/router/bin/set-password.sh"
+    web_ok=skip
+elif [ "$web_ok" = 1 ]; then
+    echo "    tableau de bord : OK"
+else
+    echo "    tableau de bord : ARRÊTÉ"; ok=0
+fi
 
 lan_ip="$(uci -q get network.lan.ipaddr | cut -d/ -f1)"
 [ "$ok" = 1 ] && echo "==> Installation terminée : http://${lan_ip:-192.168.8.1}:8080" \
