@@ -22,6 +22,10 @@ query_json() {
     [ -n "$out" ] && echo "$out" || echo "[]"
 }
 
+# MAC demandée (destinations) : validée par expression régulière avant usage
+mac=$(echo "$QUERY_STRING" | sed -n 's/^.*mac=\([0-9a-fA-F:%A]*\).*$/\1/p' | sed 's/%3[Aa]/:/g' | tr 'A-F' 'a-f')
+echo "$mac" | grep -qE '^([0-9a-f]{2}:){5}[0-9a-f]{2}$' || mac=""
+
 # Seule la valeur de q est lue, et uniquement parmi une liste fixe : aucune donnée
 # de la requête HTTP n'est insérée dans le SQL.
 q=$(echo "$QUERY_STRING" | sed -n 's/^.*q=\([a-z]*\).*$/\1/p')
@@ -57,6 +61,18 @@ case "$q" in
             FROM events e LEFT JOIN devices d ON d.mac = e.mac
             ORDER BY e.ts DESC, e.id DESC
             LIMIT 50;")"
+        ;;
+    destinations)
+        [ -n "$mac" ] || { reply '{"error":"MAC invalide"}'; exit 0; }
+        reply "$(query_json "
+            SELECT d.ip, d.proto, d.port,
+                   SUM(d.rx) AS rx, SUM(d.tx) AS tx, SUM(d.conns) AS conns,
+                   i.country, i.org
+            FROM destinations d LEFT JOIN ip_info i ON i.ip = d.ip
+            WHERE d.mac = '$mac' AND d.day = date('now','localtime')
+            GROUP BY d.ip, d.proto, d.port
+            ORDER BY (SUM(d.rx) + SUM(d.tx)) DESC
+            LIMIT 30;")"
         ;;
     *)
         reply '{"error":"requête inconnue"}'

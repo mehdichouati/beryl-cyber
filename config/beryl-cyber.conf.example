@@ -32,3 +32,6 @@ WHITELIST_ENABLED=0
 DISCORD_TOKEN=
 DISCORD_CHANNEL_ID=
 DISCORD_ADMIN_ID=
+
+# Durée de conservation du détail des destinations (jours)
+DEST_RETENTION_DAYS=30

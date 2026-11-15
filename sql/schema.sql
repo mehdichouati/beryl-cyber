@@ -73,3 +73,26 @@ CREATE TABLE IF NOT EXISTS traffic (
     PRIMARY KEY (mac, day)
 );
 CREATE INDEX IF NOT EXISTS idx_traffic_day ON traffic (day);
+
+-- Destinations : vers où chaque appareil envoie ses données (par jour)
+CREATE TABLE IF NOT EXISTS destinations (
+    mac    TEXT NOT NULL REFERENCES devices(mac) ON DELETE CASCADE,
+    day    TEXT NOT NULL,                   -- AAAA-MM-JJ
+    ip     TEXT NOT NULL,                   -- adresse distante
+    proto  TEXT NOT NULL,                   -- tcp / udp
+    port   INTEGER NOT NULL,                -- port distant (443 = HTTPS...)
+    rx     INTEGER NOT NULL DEFAULT 0,      -- reçu de cette destination
+    tx     INTEGER NOT NULL DEFAULT 0,      -- envoyé vers cette destination
+    conns  INTEGER NOT NULL DEFAULT 0,      -- nombre de connexions
+    PRIMARY KEY (mac, day, ip, proto, port)
+);
+CREATE INDEX IF NOT EXISTS idx_dest_day ON destinations (day);
+
+-- Informations sur les adresses distantes (pays, opérateur), mises en cache
+CREATE TABLE IF NOT EXISTS ip_info (
+    ip       TEXT PRIMARY KEY,
+    country  TEXT,                          -- code pays ISO (FR, US...)
+    asn      INTEGER,                       -- numéro de système autonome
+    org      TEXT,                          -- organisation (Google LLC, Meta...)
+    updated  INTEGER NOT NULL
+);

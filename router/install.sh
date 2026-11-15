@@ -54,6 +54,15 @@ if [ ! -f "$BASE/data/oui.txt" ]; then
     sh "$APP/router/bin/update-oui.sh" || echo "    (non bloquant : à relancer plus tard)"
 fi
 
+if [ ! -f "$BASE/data/geo-country.txt" ]; then
+    step "Base de géolocalisation (DB-IP)"
+    sh "$APP/router/bin/update-geoip.sh" || echo "    (non bloquant : à relancer plus tard)"
+fi
+
+step "Comptage des octets par connexion (conntrack)"
+echo "net.netfilter.nf_conntrack_acct=1" > /etc/sysctl.d/90-beryl-cyber.conf
+sysctl -w net.netfilter.nf_conntrack_acct=1 >/dev/null
+
 step "Service et lanceur"
 chmod 755 "$APP"/router/bin/*.sh "$APP"/web/cgi-bin/*.sh
 cp "$APP/router/bin/launch.sh"      /usr/sbin/beryl-cyber-launch
@@ -65,7 +74,7 @@ step "Pare-feu du tableau de bord"
 sh "$APP/router/bin/firewall.sh"
 
 step "Protection contre les mises à jour du firmware"
-for f in /etc/init.d/beryl-cyber /usr/sbin/beryl-cyber-launch /etc/rc.d/S99beryl-cyber /etc/rc.d/K10beryl-cyber /etc/beryl-cyber/; do
+for f in /etc/init.d/beryl-cyber /usr/sbin/beryl-cyber-launch /etc/rc.d/S99beryl-cyber /etc/rc.d/K10beryl-cyber /etc/beryl-cyber/ /etc/sysctl.d/90-beryl-cyber.conf; do
     grep -qxF "$f" /etc/sysupgrade.conf 2>/dev/null || echo "$f" >> /etc/sysupgrade.conf
 done
 

@@ -57,6 +57,12 @@
   .card button { margin-top: 8px; }
   input.rename { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--accent);
                  border-radius: 6px; padding: 2px 8px; width: 180px; }
+  #dest-section { display: none; }
+  #dest-section h2 { display: flex; align-items: center; gap: 12px; }
+  #dest-section h2 button { margin-left: auto; }
+  .bar { height: 6px; border-radius: 3px; background: var(--accent); opacity: .7; }
+  footer { max-width: 1320px; margin: 0 auto; padding: 0 24px 24px; color: var(--muted); font-size: 12px; }
+  footer a { color: var(--muted); }
   #error { display: none; background: #3d1d1d; border: 1px solid var(--bad); color: #ffb3ad;
            padding: 12px 16px; border-radius: 10px; }
 </style>
@@ -90,11 +96,25 @@
     </div>
   </section>
 
+  <section id="dest-section">
+    <h2><span id="dest-title">Destinations</span><button id="dest-close">Fermer</button></h2>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Organisation</th><th>Pays</th><th>Adresse</th><th>Service</th><th>Reçu / envoyé</th><th></th><th>Connexions</th></tr></thead>
+        <tbody id="dest-body"></tbody>
+      </table>
+    </div>
+  </section>
+
   <section>
     <h2>Événements récents</h2>
     <ul class="events" id="events"></ul>
   </section>
 </main>
+<footer>
+  Géolocalisation : <a href="https://db-ip.com" target="_blank" rel="noopener">IP Geolocation by DB-IP</a> (CC BY 4.0).
+  Fabricants : base OUI de Wireshark.
+</footer>
 
 <script>
 const API = "/cgi-bin/api.sh?q=";
@@ -233,6 +253,9 @@ function renderDevices(list) {
 
     const actions = el("td");
     const box = el("div", "actions");
+    const t = el("button", "", "Trafic");
+    t.addEventListener("click", () => showDestinations(d.mac, d.alias || d.hostname || d.mac));
+    box.append(t);
     if (d.status !== "approved") {
       const b = el("button", "ok", "Approuver");
       b.addEventListener("click", () => act({ action: "status", mac: d.mac, value: "approved" }));
@@ -273,6 +296,54 @@ function renderEvents(list) {
   }
 }
 
+// Services courants, d'après le port distant
+const SERVICES = {
+  "tcp:443": "HTTPS", "udp:443": "QUIC (HTTPS)", "tcp:80": "HTTP", "udp:53": "DNS", "tcp:53": "DNS",
+  "tcp:853": "DNS chiffré", "udp:123": "NTP (heure)", "tcp:5223": "Apple Push", "tcp:993": "E-mail (IMAPS)",
+  "tcp:587": "E-mail (envoi)", "tcp:465": "E-mail (envoi)", "udp:3478": "Appel / visio", "udp:3479": "Appel / visio",
+  "udp:3480": "Appel / visio", "udp:3481": "Appel / visio", "udp:19302": "Google Meet", "tcp:1935": "Streaming",
+  "tcp:8883": "Objet connecté (MQTT)", "udp:4500": "VPN (IPsec)", "udp:51820": "VPN (WireGuard)", "tcp:22": "SSH"
+};
+
+let destMac = null, destName = "";
+
+async function showDestinations(mac, name) {
+  destMac = mac; destName = name;
+  const section = document.getElementById("dest-section");
+  section.style.display = "block";
+  document.getElementById("dest-title").textContent = "Destinations aujourd'hui : " + name;
+  const body = document.getElementById("dest-body");
+  try {
+    const list = await get("destinations&mac=" + encodeURIComponent(mac));
+    body.replaceChildren();
+    if (!list.length) {
+      const tr = el("tr"); const td = el("td", "muted", "Aucune destination enregistrée aujourd'hui.");
+      td.colSpan = 7; tr.append(td); body.append(tr);
+    }
+    const max = Math.max(1, ...list.map(x => Number(x.rx) + Number(x.tx)));
+    for (const d of list) {
+      const total = Number(d.rx) + Number(d.tx);
+      const vol = el("td", "mono");
+      vol.append(el("span", "", "↓ " + bytes(d.rx)), el("span", "muted", "  ↑ " + bytes(d.tx)));
+      const barCell = el("td");
+      const bar = el("div", "bar"); bar.style.width = Math.max(2, Math.round(120 * total / max)) + "px";
+      barCell.append(bar);
+      body.append(Object.assign(el("tr"), {}));
+      body.lastChild.append(
+        el("td", "", d.org || "Inconnue"),
+        el("td", "", d.country || "–"),
+        el("td", "mono", d.ip),
+        el("td", "", SERVICES[d.proto + ":" + d.port] || (d.proto.toUpperCase() + " " + d.port)),
+        vol, barCell,
+        el("td", "muted", String(d.conns))
+      );
+    }
+  } catch (err) {
+    showError("Impossible de lire les destinations : " + err.message);
+  }
+  section.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 async function refresh() {
   if (document.activeElement && document.activeElement.classList.contains("rename")) return;
   const box = document.getElementById("error");
@@ -288,6 +359,11 @@ async function refresh() {
     showError("Impossible de lire les données : " + err.message);
   }
 }
+
+document.getElementById("dest-close").addEventListener("click", () => {
+  destMac = null;
+  document.getElementById("dest-section").style.display = "none";
+});
 
 document.getElementById("mark-seen").addEventListener("click", () => act({ action: "seen" }));
 
