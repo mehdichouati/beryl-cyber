@@ -1,0 +1,5 @@
+# Les scripts tournent sur le routeur (Linux) : fins de ligne LF obligatoires
+*.sh   text eol=lf
+*.sql  text eol=lf
+*.conf text eol=lf
+router/** text eol=lf

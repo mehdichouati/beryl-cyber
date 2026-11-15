@@ -1,0 +1,21 @@
+# Données privées : ne jamais publier
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+data/
+logs/
+backup/
+
+# Configuration réelle (seul l'exemple est versionné)
+config/beryl-cyber.conf
+
+# Secrets
+*.key
+*.pem
+.env
+
+# Fichiers système
+Thumbs.db
+desktop.ini
+.DS_Store

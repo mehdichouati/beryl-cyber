@@ -1,0 +1,13 @@
+# Configuration de Beryl CYBER
+# Copier ce fichier en beryl-cyber.conf et l'adapter.
+
+# Emplacement des données sur la clé USB
+DATA_DIR=/mnt/beryl/beryl-cyber/data
+LOG_DIR=/mnt/beryl/beryl-cyber/logs
+BACKUP_DIR=/mnt/beryl/beryl-cyber/backup
+
+# Intervalle de collecte (secondes)
+COLLECT_INTERVAL=60
+
+# Délai sans réponse avant de considérer un appareil hors ligne (secondes)
+OFFLINE_AFTER=300
