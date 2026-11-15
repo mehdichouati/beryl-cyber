@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Beryl CYBER</title>
+<style>
+  :root {
+    --bg: #0f1419; --panel: #171e26; --line: #26313d; --text: #e6edf3;
+    --muted: #8b98a5; --accent: #4cc2ff; --ok: #3fb950; --off: #6e7681;
+    --warn: #d29922; --bad: #f85149;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;
+           padding: 20px 24px; border-bottom: 1px solid var(--line); }
+  header h1 { margin: 0; font-size: 20px; letter-spacing: .5px; }
+  header h1 span { color: var(--accent); }
+  #updated { color: var(--muted); font-size: 13px; margin-left: auto; }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px; display: grid; gap: 24px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+  .card .label { color: var(--muted); font-size: 13px; }
+  .card .value { font-size: 30px; font-weight: 600; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .card.alert .value { color: var(--warn); }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  section h2 { margin: 0; padding: 14px 16px; font-size: 15px; border-bottom: 1px solid var(--line); }
+  .scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 10px 16px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 500; font-size: 13px; }
+  tr:last-child td { border-bottom: 0; }
+  .mono { font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 8px; background: var(--off); }
+  .dot.on { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px;
+         border: 1px solid var(--line); color: var(--muted); margin-left: 6px; }
+  .tag.pending  { color: var(--warn); border-color: var(--warn); }
+  .tag.approved { color: var(--ok);   border-color: var(--ok); }
+  .tag.blocked  { color: var(--bad);  border-color: var(--bad); }
+  .muted { color: var(--muted); }
+  ul.events { list-style: none; margin: 0; padding: 0; }
+  ul.events li { display: flex; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+  ul.events li:last-child { border-bottom: 0; }
+  ul.events .when { color: var(--muted); min-width: 120px; font-variant-numeric: tabular-nums; }
+  .ev-new_device { color: var(--warn); }
+  .ev-online { color: var(--ok); }
+  .ev-offline { color: var(--off); }
+  #error { display: none; background: #3d1d1d; border: 1px solid var(--bad); color: #ffb3ad;
+           padding: 12px 16px; border-radius: 10px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Beryl <span>CYBER</span></h1>
+  <span class="muted">Supervision du réseau</span>
+  <span id="updated"></span>
+</header>
+
+<main>
+  <div id="error"></div>
+
+  <div class="cards">
+    <div class="card"><div class="label">En ligne</div><div class="value" id="c-online">–</div></div>
+    <div class="card"><div class="label">Appareils connus</div><div class="value" id="c-total">–</div></div>
+    <div class="card"><div class="label">En attente d'approbation</div><div class="value" id="c-pending">–</div></div>
+    <div class="card alert"><div class="label">Nouveaux appareils non lus</div><div class="value" id="c-alerts">–</div></div>
+  </div>
+
+  <section>
+    <h2>Appareils</h2>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Appareil</th><th>IP</th><th>MAC</th><th>Statut</th><th>Vu pour la dernière fois</th><th>Première apparition</th></tr></thead>
+        <tbody id="devices"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Événements récents</h2>
+    <ul class="events" id="events"></ul>
+  </section>
+</main>
+
+<script>
+const API = "/cgi-bin/api.sh?q=";
+const REFRESH_MS = 30000;
+const LABELS = {
+  new_device: "Nouvel appareil", online: "En ligne", offline: "Hors ligne",
+  ip_change: "Changement d'IP", approved: "Approuvé", blocked: "Bloqué", renamed: "Renommé"
+};
+const STATUS = { pending: "En attente", approved: "Approuvé", blocked: "Bloqué" };
+
+let serverNow = Math.floor(Date.now() / 1000);
+
+// Construction des éléments avec textContent uniquement : les noms d'appareils
+// viennent du réseau et ne sont jamais interprétés comme du HTML.
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+function ago(ts) {
+  const s = Math.max(0, serverNow - ts);
+  if (s < 90) return "à l'instant";
+  if (s < 3600) return "il y a " + Math.round(s / 60) + " min";
+  if (s < 86400) return "il y a " + Math.round(s / 3600) + " h";
+  return "il y a " + Math.round(s / 86400) + " j";
+}
+
+function fmt(ts) {
+  return new Date(ts * 1000).toLocaleString("fr-BE", { dateStyle: "short", timeStyle: "short" });
+}
+
+async function get(q) {
+  const r = await fetch(API + q, { cache: "no-store" });
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  const data = await r.json();
+  if (data.error) throw new Error(data.error);
+  return data;
+}
+
+function renderSummary(s) {
+  serverNow = Number(s.now) || serverNow;
+  document.getElementById("c-online").textContent = s.online;
+  document.getElementById("c-total").textContent = s.total;
+  document.getElementById("c-pending").textContent = s.pending;
+  document.getElementById("c-alerts").textContent = s.alerts;
+}
+
+function renderDevices(list) {
+  const body = document.getElementById("devices");
+  body.replaceChildren();
+  if (!list.length) {
+    const tr = el("tr"); const td = el("td", "muted", "Aucun appareil pour l'instant.");
+    td.colSpan = 6; tr.append(td); body.append(tr); return;
+  }
+  for (const d of list) {
+    const tr = el("tr");
+
+    const name = el("td");
+    name.append(el("span", "dot" + (d.online ? " on" : "")));
+    name.append(document.createTextNode(d.alias || d.hostname || "Appareil inconnu"));
+    if (d.random_mac) name.append(el("span", "tag", "MAC aléatoire"));
+
+    const status = el("td");
+    status.append(el("span", "tag " + d.status, STATUS[d.status] || d.status));
+
+    tr.append(
+      name,
+      el("td", "mono", d.last_ip || "–"),
+      el("td", "mono", d.mac),
+      status,
+      el("td", "", d.online ? "en ligne" : ago(d.last_seen)),
+      el("td", "muted", fmt(d.first_seen))
+    );
+    body.append(tr);
+  }
+}
+
+function renderEvents(list) {
+  const ul = document.getElementById("events");
+  ul.replaceChildren();
+  if (!list.length) { ul.append(el("li", "muted", "Aucun événement.")); return; }
+  for (const e of list) {
+    const li = el("li");
+    li.append(el("span", "when", fmt(e.ts)));
+    li.append(el("span", "ev-" + e.type, LABELS[e.type] || e.type));
+    li.append(el("span", "", e.name || ""));
+    if (e.detail) li.append(el("span", "muted mono", e.detail));
+    ul.append(li);
+  }
+}
+
+async function refresh() {
+  const box = document.getElementById("error");
+  try {
+    const [s, d, e] = await Promise.all([get("summary"), get("devices"), get("events")]);
+    renderSummary(s[0] || s);
+    renderDevices(d);
+    renderEvents(e);
+    box.style.display = "none";
+    document.getElementById("updated").textContent =
+      "Mis à jour à " + new Date().toLocaleTimeString("fr-BE");
+  } catch (err) {
+    box.textContent = "Impossible de lire les données : " + err.message;
+    box.style.display = "block";
+  }
+}
+
+refresh();
+setInterval(refresh, REFRESH_MS);
+</script>
+</body>
+</html>

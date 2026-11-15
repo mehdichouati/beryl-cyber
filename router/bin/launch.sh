@@ -29,4 +29,4 @@ fi
 
 [ "$(readlink "$LINK")" = "$mp" ] || ln -sfn "$mp" "$LINK"
 
-exec "$LINK/beryl-cyber/app/bin/collect.sh" --loop
+exec "$LINK/beryl-cyber/app/router/bin/collect.sh" --loop
