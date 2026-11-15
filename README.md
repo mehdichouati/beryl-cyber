@@ -25,7 +25,8 @@ inventaire des appareils, historique de présence, alertes et tableau de bord we
 ### V2 : trafic et notifications
 - [x] Bande passante par appareil
 - [x] Destinations par appareil (organisation, pays, service)
-- [ ] Graphiques
+- [x] Graphiques (consommation sur 30 jours, par appareil, principales destinations)
+- [x] Carte du monde des pays contactés
 - [x] Notifications Discord et approbation à distance par réaction
 
 ### V3 : DNS et confidentialité

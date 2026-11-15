@@ -63,6 +63,29 @@
   .bar { height: 6px; border-radius: 3px; background: var(--accent); opacity: .7; }
   footer { max-width: 1320px; margin: 0 auto; padding: 0 24px 24px; color: var(--muted); font-size: 12px; }
   footer a { color: var(--muted); }
+  /* Graphiques (SVG dessinés à la main, sans bibliothèque externe) */
+  :root { --series-rx: #3987e5; --series-tx: #d95926; --grid: #26313d; }
+  .charts { display: grid; grid-template-columns: 2fr 1fr; gap: 24px; align-items: start; }
+  @media (max-width: 900px) { .charts { grid-template-columns: 1fr; } }
+  .chart { padding: 12px 16px 16px; }
+  .chart svg { width: 100%; height: auto; display: block; overflow: visible; }
+  .chart svg text { fill: var(--muted); font-size: 11px; font-family: inherit; }
+  .chart svg text.val { fill: var(--text); }
+  .legend { display: flex; gap: 16px; font-size: 12px; color: var(--muted); padding: 0 16px; margin-top: -4px; }
+  .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 3px;
+                         margin-right: 6px; vertical-align: -1px; background: var(--c); }
+  .chart .empty { color: var(--muted); padding: 24px 0; }
+  #map svg { max-width: 960px; margin: 0 auto; }
+  #map svg path { stroke: var(--panel); stroke-width: .6; }
+  #map svg path:hover { stroke: var(--text); stroke-width: 1; }
+  .map-legend { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); padding: 0 16px 12px; flex-wrap: wrap; }
+  .map-legend i { display: inline-block; width: 28px; height: 10px; border-radius: 2px; }
+  .map-note { font-size: 12px; color: var(--muted); padding: 0 16px 14px; }
+  #tip { position: fixed; pointer-events: none; z-index: 10; display: none; background: #0b1016;
+         border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 12px;
+         box-shadow: 0 4px 16px rgba(0,0,0,.4); }
+  #tip b { display: block; margin-bottom: 2px; }
+  #tip .sw { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; }
   #error { display: none; background: #3d1d1d; border: 1px solid var(--bad); color: #ffb3ad;
            padding: 12px 16px; border-radius: 10px; }
 </style>
@@ -85,6 +108,32 @@
     <div class="card alert"><div class="label">Nouveaux appareils non lus</div><div class="value" id="c-alerts">–</div>
       <button id="mark-seen" hidden>Tout marquer comme lu</button></div>
   </div>
+
+  <div class="charts">
+    <section>
+      <h2>Consommation des 30 derniers jours</h2>
+      <div class="legend"><span style="--c: var(--series-rx)">Reçu</span><span style="--c: var(--series-tx)">Envoyé</span></div>
+      <div class="chart" id="chart-daily"></div>
+    </section>
+    <section>
+      <h2>Ce mois par appareil</h2>
+      <div class="legend"><span style="--c: var(--series-rx)">Reçu</span><span style="--c: var(--series-tx)">Envoyé</span></div>
+      <div class="chart" id="chart-devices"></div>
+    </section>
+  </div>
+
+  <section>
+    <h2>Carte des destinations aujourd'hui (tous appareils)</h2>
+    <div class="chart" id="map"></div>
+    <div class="map-legend" id="map-legend"></div>
+    <div class="map-note">Le pays indiqué est celui du serveur contacté, pas celui de l'entreprise :
+      un grand service (Google, Netflix…) répond souvent depuis un serveur proche de chez vous.</div>
+  </section>
+
+  <section>
+    <h2>Principales destinations aujourd'hui (tous appareils)</h2>
+    <div class="chart" id="chart-orgs"></div>
+  </section>
 
   <section>
     <h2>Appareils</h2>
@@ -111,9 +160,10 @@
     <ul class="events" id="events"></ul>
   </section>
 </main>
+<div id="tip"></div>
 <footer>
   Géolocalisation : <a href="https://db-ip.com" target="_blank" rel="noopener">IP Geolocation by DB-IP</a> (CC BY 4.0).
-  Fabricants : base OUI de Wireshark.
+  Fabricants : base OUI de Wireshark. Fond de carte : Natural Earth (domaine public).
 </footer>
 
 <script>
@@ -296,6 +346,185 @@ function renderEvents(list) {
   }
 }
 
+// ---- Graphiques -------------------------------------------------------------
+const SVGNS = "http://www.w3.org/2000/svg";
+function svg(tag, attrs, text) {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+// Barre aux coins arrondis seulement du côté de la valeur (haut, ou droite)
+function barPath(x, y, w, h, r, dir) {
+  r = Math.min(r, w / 2, h / 2);
+  if (h <= 0 || w <= 0) return "";
+  if (dir === "up")
+    return `M${x},${y + h} V${y + r} Q${x},${y} ${x + r},${y} H${x + w - r} Q${x + w},${y} ${x + w},${y + r} V${y + h} Z`;
+  return `M${x},${y} H${x + w - r} Q${x + w},${y} ${x + w},${y + r} V${y + h - r} Q${x + w},${y + h} ${x + w - r},${y + h} H${x} Z`;
+}
+
+function niceMax(v) {
+  if (v <= 0) return 1;
+  const p = Math.pow(1024, Math.floor(Math.log(v) / Math.log(1024)));
+  const steps = [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10, 15, 20, 25, 30, 40, 50, 60, 80, 100, 150, 200, 250, 300, 400, 500, 600, 800, 1000];
+  for (const s of steps) if (s * p >= v) return s * p;
+  return v;
+}
+
+const tip = document.getElementById("tip");
+function showTip(ev, title, rows) {
+  tip.replaceChildren(el("b", "", title));
+  for (const [color, label, value] of rows) {
+    const line = el("div");
+    if (color) { const sw = el("span", "sw"); sw.style.background = color; line.append(sw); }
+    line.append(document.createTextNode(label + " : " + value));
+    tip.append(line);
+  }
+  tip.style.display = "block";
+  const x = Math.min(ev.clientX + 14, window.innerWidth - tip.offsetWidth - 8);
+  tip.style.left = x + "px";
+  tip.style.top = (ev.clientY + 14) + "px";
+}
+function hideTip() { tip.style.display = "none"; }
+
+const RX = "#3987e5", TX = "#d95926";
+
+function drawDaily(rows) {
+  const box = document.getElementById("chart-daily");
+  // 30 jours, y compris ceux sans trafic
+  const map = Object.fromEntries(rows.map(r => [r.day, r]));
+  const days = [];
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(serverNow * 1000 - i * 86400000);
+    const key = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    const r = map[key] || {};
+    days.push({ key, label: d.toLocaleDateString("fr-BE", { day: "numeric", month: "short" }), rx: Number(r.rx) || 0, tx: Number(r.tx) || 0 });
+  }
+  const W = 640, H = 220, L = 56, B = 24, T = 8, pw = W - L - 8, ph = H - B - T;
+  const max = niceMax(Math.max(...days.map(d => d.rx + d.tx)));
+  const s = svg("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Consommation quotidienne sur 30 jours" });
+  for (let g = 0; g <= 4; g++) {
+    const y = T + ph - ph * g / 4;
+    s.append(svg("line", { x1: L, x2: W - 8, y1: y, y2: y, stroke: "var(--grid)", "stroke-width": 1 }));
+    s.append(svg("text", { x: L - 6, y: y + 4, "text-anchor": "end" }, bytes(max * g / 4)));
+  }
+  const slot = pw / days.length, bw = Math.max(3, slot - 4);
+  days.forEach((d, i) => {
+    const x = L + i * slot + (slot - bw) / 2;
+    const hRx = ph * d.rx / max, hTx = ph * d.tx / max;
+    const yRx = T + ph - hRx;
+    const gap = hRx > 0 && hTx > 0 ? 2 : 0;
+    if (hRx > 0) s.append(svg("path", { d: hTx > 0 ? `M${x},${T + ph} V${yRx} H${x + bw} V${T + ph} Z` : barPath(x, yRx, bw, hRx, 4, "up"), fill: RX }));
+    if (hTx > 0) s.append(svg("path", { d: barPath(x, yRx - gap - hTx, bw, hTx, 4, "up"), fill: TX }));
+    if (i % 5 === 4 || i === days.length - 1)
+      s.append(svg("text", { x: x + bw / 2, y: H - 6, "text-anchor": "middle" }, d.label));
+    const hit = svg("rect", { x: L + i * slot, y: T, width: slot, height: ph, fill: "transparent" });
+    hit.addEventListener("mousemove", ev => showTip(ev, d.label, [[RX, "Reçu", bytes(d.rx)], [TX, "Envoyé", bytes(d.tx)], [null, "Total", bytes(d.rx + d.tx)]]));
+    hit.addEventListener("mouseleave", hideTip);
+    s.append(hit);
+  });
+  box.replaceChildren(s);
+}
+
+function drawHBars(boxId, items, opts) {
+  const box = document.getElementById(boxId);
+  if (!items.length) { box.replaceChildren(el("div", "empty", "Pas encore de données.")); return; }
+  const W = opts.width || 400, rowH = 26, labelW = opts.labelW || 120, H = items.length * rowH;
+  const pw = W - labelW - 70;
+  const max = Math.max(...items.map(it => it.parts.reduce((a, p) => a + p.v, 0))) || 1;
+  const s = svg("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": opts.label });
+  items.forEach((it, i) => {
+    const y = i * rowH + 5, h = rowH - 10;
+    const name = it.name.length > 18 ? it.name.slice(0, 17) + "…" : it.name;
+    s.append(svg("text", { x: labelW - 8, y: y + h / 2 + 4, "text-anchor": "end", class: "val" }, name));
+    let x = labelW;
+    const total = it.parts.reduce((a, p) => a + p.v, 0);
+    const visible = it.parts.filter(p => p.v > 0);
+    visible.forEach((p, k) => {
+      const w = Math.max(1, pw * p.v / max);
+      const last = k === visible.length - 1;
+      s.append(svg("path", { d: last ? barPath(x, y, w, h, 4, "right") : `M${x},${y} H${x + w} V${y + h} H${x} Z`, fill: p.c }));
+      x += w + (last ? 0 : 2);
+    });
+    s.append(svg("text", { x: x + 6, y: y + h / 2 + 4 }, bytes(total)));
+    const hit = svg("rect", { x: 0, y: i * rowH, width: W, height: rowH, fill: "transparent" });
+    hit.addEventListener("mousemove", ev => showTip(ev, it.name, it.parts.map(p => [p.c, p.label, bytes(p.v)])));
+    hit.addEventListener("mouseleave", hideTip);
+    s.append(hit);
+  });
+  box.replaceChildren(s);
+}
+
+// ---- Carte du monde (choroplèthe) -----------------------------------------
+// Fond de carte : Natural Earth 1:110m (domaine public), via world-atlas, projeté
+// à l'avance en SVG (web/world.json). Aucune ressource externe chargée.
+const MAP_BINS = ["#104281", "#1c5cab", "#2a78d6", "#5598e7", "#9ec5f4"];   // peu -> beaucoup
+const MAP_EMPTY = "#222c37";
+const HOME = "BE";
+let world = null;
+const regionName = (() => {
+  try { const dn = new Intl.DisplayNames(["fr"], { type: "region" }); return cc => dn.of(cc) || cc; }
+  catch (e) { return cc => cc; }
+})();
+
+async function drawMap(rows) {
+  const box = document.getElementById("map");
+  if (!world) {
+    const r = await fetch("/world.json");
+    if (!r.ok) throw new Error("fond de carte introuvable");
+    world = await r.json();
+  }
+  const data = Object.fromEntries(rows.map(r => [r.cc, r]));
+  const vals = rows.map(r => Number(r.total)).filter(v => v > 0);
+  // Échelle logarithmique : les volumes vont de quelques Ko à plusieurs Go
+  const lmin = Math.log10(Math.min(...vals, 1e12)), lmax = Math.log10(Math.max(...vals, 1));
+  const bin = v => {
+    if (!v) return -1;
+    if (lmax - lmin < 0.01) return MAP_BINS.length - 1;
+    return Math.min(MAP_BINS.length - 1, Math.floor((Math.log10(v) - lmin) / (lmax - lmin) * MAP_BINS.length));
+  };
+  const s = svg("svg", { viewBox: `0 0 ${world.w} ${world.h}`, role: "img",
+                         "aria-label": "Carte des pays contactés aujourd'hui, " + rows.length + " pays" });
+  for (const c of world.c) {
+    const r = data[c.id], b = r ? bin(Number(r.total)) : -1;
+    const p = svg("path", { d: c.d, fill: b < 0 ? MAP_EMPTY : MAP_BINS[b] });
+    if (c.id === HOME) { p.setAttribute("stroke", "#e6edf3"); p.setAttribute("stroke-width", "1.2"); }
+    p.addEventListener("mousemove", ev => {
+      const name = (c.id ? regionName(c.id) : "Territoire") + (c.id === HOME ? " (chez vous)" : "");
+      showTip(ev, name, r ? [[null, "Volume", bytes(r.total)], [null, "Connexions", String(r.conns)],
+                             [null, "Serveurs", String(r.ips)]] : [[null, "Aucun échange", "–"]]);
+    });
+    p.addEventListener("mouseleave", hideTip);
+    s.append(p);
+  }
+  box.replaceChildren(s);
+
+  const legend = document.getElementById("map-legend");
+  legend.replaceChildren();
+  if (!vals.length) { legend.append(el("span", "", "Pas encore de données aujourd'hui.")); return; }
+  legend.append(el("span", "", bytes(Math.pow(10, lmin)) + " "));
+  MAP_BINS.forEach(c => { const i = el("i"); i.style.background = c; legend.append(i); });
+  legend.append(el("span", "", " " + bytes(Math.pow(10, lmax))));
+  const top = rows.slice(0, 3).map(r => regionName(r.cc)).join(", ");
+  legend.append(el("span", "", "  ·  " + rows.length + " pays contactés · en tête : " + top));
+}
+
+async function refreshCharts() {
+  try {
+    const [daily, dev, orgs, ctry] = await Promise.all([get("daily"), get("bydevice"), get("orgs"), get("countries")]);
+    await drawMap(ctry);
+    drawDaily(daily);
+    drawHBars("chart-devices", dev.map(d => ({ name: d.name, parts: [
+      { v: Number(d.rx) || 0, c: RX, label: "Reçu" }, { v: Number(d.tx) || 0, c: TX, label: "Envoyé" }] })),
+      { label: "Consommation du mois par appareil", width: 300, labelW: 110 });
+    drawHBars("chart-orgs", orgs.map(o => ({ name: o.org, parts: [{ v: Number(o.total) || 0, c: RX, label: "Volume" }] })),
+      { label: "Principales destinations aujourd'hui", width: 1100, labelW: 200 });
+  } catch (err) {
+    showError("Impossible de lire les graphiques : " + err.message);
+  }
+}
+
 // Services courants, d'après le port distant
 const SERVICES = {
   "tcp:443": "HTTPS", "udp:443": "QUIC (HTTPS)", "tcp:80": "HTTP", "udp:53": "DNS", "tcp:53": "DNS",
@@ -367,8 +596,9 @@ document.getElementById("dest-close").addEventListener("click", () => {
 
 document.getElementById("mark-seen").addEventListener("click", () => act({ action: "seen" }));
 
-refresh();
+refresh().then(refreshCharts);
 setInterval(refresh, REFRESH_MS);
+setInterval(refreshCharts, 60000);
 </script>
 </body>
 </html>

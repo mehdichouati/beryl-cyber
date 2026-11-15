@@ -62,6 +62,35 @@ case "$q" in
             ORDER BY e.ts DESC, e.id DESC
             LIMIT 50;")"
         ;;
+    daily)
+        reply "$(query_json "
+            SELECT day, SUM(rx) AS rx, SUM(tx) AS tx
+            FROM traffic
+            WHERE day >= date('now','localtime','-29 days')
+            GROUP BY day ORDER BY day;")"
+        ;;
+    bydevice)
+        reply "$(query_json "
+            SELECT COALESCE(d.alias, d.hostname, d.mac) AS name, SUM(t.rx) AS rx, SUM(t.tx) AS tx
+            FROM traffic t JOIN devices d ON d.mac = t.mac
+            WHERE t.day >= date('now','localtime','start of month')
+            GROUP BY t.mac ORDER BY SUM(t.rx + t.tx) DESC LIMIT 8;")"
+        ;;
+    orgs)
+        reply "$(query_json "
+            SELECT COALESCE(i.org, 'Inconnue') AS org, SUM(d.rx + d.tx) AS total
+            FROM destinations d LEFT JOIN ip_info i ON i.ip = d.ip
+            WHERE d.day = date('now','localtime')
+            GROUP BY COALESCE(i.org, 'Inconnue') ORDER BY total DESC LIMIT 10;")"
+        ;;
+    countries)
+        reply "$(query_json "
+            SELECT i.country AS cc, SUM(d.rx + d.tx) AS total, SUM(d.conns) AS conns,
+                   COUNT(DISTINCT d.ip) AS ips
+            FROM destinations d JOIN ip_info i ON i.ip = d.ip
+            WHERE d.day = date('now','localtime') AND i.country IS NOT NULL
+            GROUP BY i.country ORDER BY total DESC;")"
+        ;;
     destinations)
         [ -n "$mac" ] || { reply '{"error":"MAC invalide"}'; exit 0; }
         reply "$(query_json "
