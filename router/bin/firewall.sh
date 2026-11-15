@@ -57,6 +57,22 @@ else
     echo "    accès réservé à $ADMIN_MAC${ADMIN_IP:+ ($ADMIN_IP)}"
 fi
 
+# Les règles de la liste blanche sont réappliquées à chaque rechargement du pare-feu
+mkdir -p /etc/beryl-cyber
+cat > /etc/beryl-cyber/firewall.include <<'INC'
+#!/bin/sh
+# Beryl CYBER : réapplique la liste blanche après un rechargement du pare-feu
+WL=/mnt/beryl/beryl-cyber/app/router/bin/whitelist.sh
+[ -x "$WL" ] && "$WL"
+exit 0
+INC
+chmod 755 /etc/beryl-cyber/firewall.include
+uci -q delete firewall.beryl_cyber_include
+uci set firewall.beryl_cyber_include=include
+uci set firewall.beryl_cyber_include.type='script'
+uci set firewall.beryl_cyber_include.path='/etc/beryl-cyber/firewall.include'
+uci set firewall.beryl_cyber_include.reload='1'
+
 uci commit dhcp
 uci commit firewall
 /etc/init.d/dnsmasq reload >/dev/null 2>&1

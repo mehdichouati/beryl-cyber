@@ -65,6 +65,7 @@
 <header>
   <h1>Beryl <span>CYBER</span></h1>
   <span class="muted">Supervision du réseau</span>
+  <span class="tag" id="wl-mode"></span>
   <span id="updated"></span>
 </header>
 
@@ -188,6 +189,10 @@ function renderSummary(s) {
   document.getElementById("c-pending").textContent = s.pending;
   document.getElementById("c-alerts").textContent = s.alerts;
   document.getElementById("mark-seen").hidden = !(Number(s.alerts) > 0);
+  const mode = document.getElementById("wl-mode");
+  const on = Number(s.whitelist) === 1;
+  mode.textContent = on ? "Liste blanche active" : "Liste blanche inactive";
+  mode.className = "tag " + (on ? "approved" : "pending");
 }
 
 function renderDevices(list) {

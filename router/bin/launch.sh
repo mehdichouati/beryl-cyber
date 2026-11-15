@@ -29,4 +29,8 @@ fi
 
 [ "$(readlink "$LINK")" = "$mp" ] || ln -sfn "$mp" "$LINK"
 
+# Liste blanche appliquée dès que la base est disponible
+WL="$LINK/beryl-cyber/app/router/bin/whitelist.sh"
+[ -x "$WL" ] && "$WL"
+
 exec "$LINK/beryl-cyber/app/router/bin/collect.sh" --loop

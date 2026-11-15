@@ -19,3 +19,8 @@ ADMIN_IP=
 
 # Port du tableau de bord
 WEB_PORT=8080
+
+# Liste blanche : 1 = seuls le poste d'administration et les appareils approuvés
+# ont accès à Internet. 0 = seuls les appareils bloqués sont coupés.
+# Approuver ses propres appareils AVANT de passer à 1.
+WHITELIST_ENABLED=0

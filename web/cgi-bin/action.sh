@@ -63,7 +63,7 @@ case "$action" in
         sql "BEGIN; UPDATE devices SET status = '$value' WHERE mac = '$mac'; $ev COMMIT;" \
             || reply "500 Internal Server Error" '{"error":"écriture impossible"}'
         # Application immédiate au pare-feu (liste blanche), si le module est installé
-        [ -x "$APP_DIR/router/bin/whitelist.sh" ] && "$APP_DIR/router/bin/whitelist.sh" >/dev/null 2>&1
+        [ -x "$APP_DIR/router/bin/whitelist.sh" ] && "$APP_DIR/router/bin/whitelist.sh" "$mac" >/dev/null 2>&1
         ;;
     rename)
         valid_mac "$mac" && device_exists "$mac" || reply "404 Not Found" '{"error":"appareil inconnu"}'

@@ -5,7 +5,10 @@
 #   /cgi-bin/api.sh?q=devices   inventaire
 #   /cgi-bin/api.sh?q=events    50 derniers événements
 
+CONF="${CONF:-/mnt/beryl/beryl-cyber/beryl-cyber.conf}"
+[ -f "$CONF" ] && . "$CONF"
 DB="${DB:-/mnt/beryl/beryl-cyber/data/beryl.db}"
+case "$WHITELIST_ENABLED" in 1) WL=1 ;; *) WL=0 ;; esac
 
 reply() {
     printf 'Content-Type: application/json; charset=utf-8\r\n'
@@ -33,7 +36,8 @@ case "$q" in
               (SELECT COUNT(*) FROM devices WHERE online = 1)      AS online,
               (SELECT COUNT(*) FROM devices WHERE status = 'pending') AS pending,
               (SELECT COUNT(*) FROM events  WHERE seen = 0 AND type = 'new_device') AS alerts,
-              strftime('%s','now')                                 AS now;")"
+              strftime('%s','now')                                 AS now,
+              $WL                                                  AS whitelist;")"
         ;;
     devices)
         reply "$(query_json "
