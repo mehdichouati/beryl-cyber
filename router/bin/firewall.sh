@@ -31,7 +31,7 @@ else
     # Bail DHCP statique : le poste garde toujours la même IP
     if [ -n "$ADMIN_IP" ]; then
         uci set dhcp.beryl_cyber_admin=host
-        uci set dhcp.beryl_cyber_admin.name='beryl-cyber-admin'
+        # pas d'option "name" : sinon dnsmasq remplacerait le nom annoncé par le PC
         uci set dhcp.beryl_cyber_admin.mac="$ADMIN_MAC"
         uci set dhcp.beryl_cyber_admin.ip="$ADMIN_IP"
     fi

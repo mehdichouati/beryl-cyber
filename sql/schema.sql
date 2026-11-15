@@ -52,3 +52,14 @@ CREATE TABLE IF NOT EXISTS events (
 );
 CREATE INDEX IF NOT EXISTS idx_events_ts      ON events (ts);
 CREATE INDEX IF NOT EXISTS idx_events_unseen  ON events (seen) WHERE seen = 0;
+
+-- Notifications Discord : un message par nouvel appareil, en attente d'une réaction
+CREATE TABLE IF NOT EXISTS discord_messages (
+    message_id  TEXT PRIMARY KEY,               -- identifiant du message Discord
+    event_id    INTEGER UNIQUE,                 -- événement "new_device" notifié
+    mac         TEXT NOT NULL,
+    created     INTEGER NOT NULL,
+    state       TEXT NOT NULL DEFAULT 'open'
+                CHECK (state IN ('open', 'approved', 'blocked', 'expired'))
+);
+CREATE INDEX IF NOT EXISTS idx_discord_open ON discord_messages (state) WHERE state = 'open';

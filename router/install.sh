@@ -38,7 +38,21 @@ if ! command -v sqlite3 >/dev/null 2>&1; then
     opkg install sqlite3-cli
 fi
 
+if ! command -v curl >/dev/null 2>&1; then
+    step "Installation de curl (notifications Discord)"
+    opkg update >/dev/null
+    opkg install curl ca-bundle
+fi
+
+# La configuration peut contenir le jeton Discord : lisible par root uniquement
+[ -f "$BASE/beryl-cyber.conf" ] && chmod 600 "$BASE/beryl-cyber.conf"
+
 command -v uhttpd >/dev/null 2>&1 || { echo "uhttpd introuvable : opkg install uhttpd"; exit 1; }
+
+if [ ! -f "$BASE/data/oui.txt" ]; then
+    step "Base des fabricants (OUI)"
+    sh "$APP/router/bin/update-oui.sh" || echo "    (non bloquant : à relancer plus tard)"
+fi
 
 step "Service et lanceur"
 chmod 755 "$APP"/router/bin/*.sh "$APP"/web/cgi-bin/*.sh

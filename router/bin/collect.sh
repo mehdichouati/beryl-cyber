@@ -22,12 +22,12 @@ OFFLINE_AFTER="${OFFLINE_AFTER:-300}"
 
 log() { logger -t beryl-cyber "$*" 2>/dev/null || echo "beryl-cyber: $*" >&2; }
 
-# Crée la base au premier lancement
+# Crée la base au premier lancement, et applique le schéma à chaque démarrage :
+# il est idempotent (IF NOT EXISTS), ce qui ajoute les nouvelles tables après une mise à jour.
 init_db() {
-    [ -f "$DB" ] && return 0
     mkdir -p "$DATA_DIR" || return 1
+    [ -f "$DB" ] || log "création de la base : $DB"
     sqlite3 "$DB" < "$APP_DIR/sql/schema.sql" >/dev/null || return 1
-    log "base créée : $DB"
 }
 
 # Lit la table de voisinage IPv4 de l'interface LAN.
@@ -121,6 +121,25 @@ build_sql() {
     }'
 }
 
+# Fabricant des nouveaux appareils, d'après les 3 premiers octets de la MAC (OUI).
+# Une MAC aléatoire n'a pas de fabricant : elle est marquée "Adresse privée".
+# Chaque appareil n'est recherché qu'une fois (vendor passe de NULL à une valeur).
+lookup_vendors() {
+    oui="$DATA_DIR/oui.txt"
+    sqlite3 "$DB" "SELECT mac, random_mac FROM devices WHERE vendor IS NULL;" 2>/dev/null |
+    while IFS='|' read -r mac rnd; do
+        if [ "$rnd" = 1 ]; then
+            vendor="Adresse privée"
+        elif [ -f "$oui" ]; then
+            prefix="$(echo "$mac" | cut -c1-8 | tr -d ':' | tr 'a-f' 'A-F')"
+            vendor="$(grep -m 1 "^$prefix|" "$oui" | cut -d'|' -f2)"
+        else
+            continue        # base absente : on réessaiera plus tard
+        fi
+        sqlite3 "$DB" "UPDATE devices SET vendor = '$vendor' WHERE mac = '$mac';" 2>/dev/null
+    done
+}
+
 collect_once() {
     # Horloge pas encore synchronisée (juste après un démarrage) : on attend
     if [ "$(date +%Y)" -lt 2025 ]; then
@@ -130,6 +149,7 @@ collect_once() {
     refresh_stale
     now=$(date +%s)
     build_sql "$now" | sqlite3 "$DB" || log "erreur pendant l'écriture en base"
+    lookup_vendors
 }
 
 command -v sqlite3 >/dev/null 2>&1 || { log "sqlite3 introuvable (opkg install sqlite3-cli)"; exit 1; }
@@ -138,6 +158,8 @@ init_db || { log "impossible de créer la base $DB"; exit 1; }
 if [ "$1" = "--loop" ]; then
     while true; do
         collect_once
+        # Notifications Discord (sans effet si Discord n'est pas configuré)
+        [ -x "$APP_DIR/router/bin/notify.sh" ] && "$APP_DIR/router/bin/notify.sh"
         sleep "$COLLECT_INTERVAL"
     done
 else

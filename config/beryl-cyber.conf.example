@@ -24,3 +24,11 @@ WEB_PORT=8080
 # ont accès à Internet. 0 = seuls les appareils bloqués sont coupés.
 # Approuver ses propres appareils AVANT de passer à 1.
 WHITELIST_ENABLED=0
+
+# Notifications Discord (laisser vide pour désactiver)
+# DISCORD_TOKEN      : jeton du bot (secret : ne jamais le publier)
+# DISCORD_CHANNEL_ID : identifiant du salon privé des alertes
+# DISCORD_ADMIN_ID   : ton identifiant Discord (seules tes réactions sont prises en compte)
+DISCORD_TOKEN=
+DISCORD_CHANNEL_ID=
+DISCORD_ADMIN_ID=

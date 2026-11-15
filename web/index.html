@@ -209,6 +209,7 @@ function renderDevices(list) {
     name.append(el("span", "dot" + (d.online ? " on" : "")));
     name.append(document.createTextNode(d.alias || d.hostname || "Appareil inconnu"));
     if (d.random_mac) name.append(el("span", "tag", "MAC aléatoire"));
+    else if (d.vendor) name.append(el("span", "tag", d.vendor));
     const edit = el("button", "icon", "✎");
     edit.title = "Renommer";
     edit.addEventListener("click", () => startRename(name, d));
