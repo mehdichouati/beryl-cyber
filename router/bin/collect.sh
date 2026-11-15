@@ -162,6 +162,8 @@ if [ "$1" = "--loop" ]; then
         [ -x "$APP_DIR/router/bin/traffic.sh" ] && "$APP_DIR/router/bin/traffic.sh"
         # Destinations du trafic
         [ -x "$APP_DIR/router/bin/destinations.sh" ] && "$APP_DIR/router/bin/destinations.sh"
+        # Entretien : mises à jour mensuelles des bases de référence
+        [ -x "$APP_DIR/router/bin/maintenance.sh" ] && "$APP_DIR/router/bin/maintenance.sh"
         # Notifications Discord (sans effet si Discord n'est pas configuré)
         [ -x "$APP_DIR/router/bin/notify.sh" ] && "$APP_DIR/router/bin/notify.sh"
         sleep "$COLLECT_INTERVAL"

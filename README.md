@@ -82,7 +82,7 @@ docs/            documentation (architecture, choix techniques)
 
 ## Documentation
 
-- [Architecture](docs/architecture.md)
+- [Architecture, sécurité, choix techniques et incidents résolus](docs/architecture.md)
 
 ## Stack
 

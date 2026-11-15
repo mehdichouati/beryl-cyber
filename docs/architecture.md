@@ -4,34 +4,112 @@
 
 ```
 Internet ── Box Orange (rez) ══ câble mural ══ Beryl AX (2e étage) ── Wi-Fi ── appareils supervisés
+                  └─ Wi-Fi de la box : appareils non supervisés
 ```
 
-Le Beryl fonctionne en mode routeur : il a son propre sous-réseau (192.168.8.0/24),
-son propre DHCP et fait du NAT. Seuls les appareils connectés au Beryl sont supervisés.
+Le Beryl fonctionne en **mode routeur** : son propre sous-réseau (192.168.8.0/24), son propre
+DHCP et du NAT. Il voit donc tout le trafic des appareils qui lui sont connectés, et seulement eux.
 
 ## Matériel
 
 | Élément | Valeur |
 |---|---|
 | Routeur | GL.iNet Beryl AX (GL-MT3000) |
-| Système | OpenWrt 21.02 (firmware GL.iNet), noyau 5.4 |
-| Processeur | MediaTek MT7981, ARM 64 bits |
+| Système | OpenWrt 21.02 (firmware GL.iNet 4.x), noyau Linux 5.4, BusyBox 1.33 |
+| Processeur | MediaTek MT7981, 2 cœurs ARM Cortex-A53 |
 | RAM | 512 Mo |
 | Stockage des données | Clé USB 16 Go, ext4, label `beryl` |
 
-## Logiciel : trois couches
+## Vue d'ensemble
 
-| Couche | Technologie | Rôle |
+```
+                         ┌──────────────── Routeur Beryl AX ────────────────┐
+  Appareils ── Wi-Fi ──▶ │  noyau : ARP · DHCP · conntrack · iptables        │
+                         │      │                                            │
+                         │      ▼  toutes les 60 s (service procd)           │
+                         │  collect.sh ─▶ traffic.sh ─▶ destinations.sh      │
+                         │      │          maintenance.sh   notify.sh ───────┼──▶ API Discord
+                         │      ▼                                            │      (HTTPS sortant)
+                         │  SQLite (clé USB) : beryl.db  +  geo.db           │
+                         │      ▲                                            │
+                         │  uhttpd :8080 ─ api.sh (lecture) / action.sh      │
+                         └──────┼────────────────────────────────────────────┘
+                                ▼  pare-feu : PC d'administration uniquement + mot de passe
+                         Tableau de bord (HTML/JS, graphiques SVG, carte)
+```
+
+## Composants
+
+| Fichier | Rôle |
+|---|---|
+| `router/bin/launch.sh` | Attend la clé USB, recrée le raccourci `/mnt/beryl`, applique la liste blanche, lance la collecte |
+| `router/bin/collect.sh` | Boucle principale : appareils (ARP + DHCP), présence, fabricant (OUI), puis appelle les autres modules |
+| `router/bin/traffic.sh` | Octets envoyés/reçus par appareil (chaîne iptables `BERYL_ACCT`, compteurs lus et remis à zéro chaque minute) |
+| `router/bin/destinations.sh` | Destinations par appareil depuis conntrack, enrichies (pays, organisation) en SQL dans `geo.db` |
+| `router/bin/whitelist.sh` | Liste blanche et blocages (chaîne iptables `BERYL_WL`), coupure des connexions en cours via conntrack |
+| `router/bin/notify.sh` | Alerte Discord pour chaque nouvel appareil, approbation ou blocage par réaction ✅ / ⛔ |
+| `router/bin/maintenance.sh` | Mise à jour mensuelle des bases DB-IP et OUI, renouvellement du cache d'adresses |
+| `router/bin/firewall.sh` | Bail DHCP fixe et règles d'accès au port 8080 pour le PC d'administration |
+| `router/install.sh` | Installation idempotente ; protège le service des mises à jour du firmware (`/etc/sysupgrade.conf`) |
+| `web/cgi-bin/api.sh` | API JSON en lecture seule (requêtes choisies dans une liste fixe) |
+| `web/cgi-bin/action.sh` | API d'écriture : renommer, approuver, bloquer |
+| `deploy.sh` / `backup.sh` | Côté PC : déploiement en une commande, sauvegarde mensuelle de la base |
+
+## Base de données (SQLite, mode WAL)
+
+| Table | Contenu | Conservation |
 |---|---|---|
-| Collecte | Script shell (ash), toutes les 60 s | Lit les baux DHCP et la table de voisinage |
-| Stockage | SQLite sur clé USB | Inventaire, historique de présence, événements |
-| Affichage | Page HTML/JS + CGI JSON | Tableau de bord accessible uniquement depuis le PC d'administration |
+| `devices` | Inventaire : MAC, nom, alias, fabricant, statut liste blanche | permanente |
+| `sessions` | Périodes de connexion (une ligne par session, pas par minute) | permanente |
+| `events` | Nouvel appareil, en ligne, hors ligne, changement d'IP, approuvé, bloqué | permanente |
+| `traffic` | Octets reçus/envoyés par appareil et par jour | permanente (très petite) |
+| `destinations` | Destinations par appareil et par jour (IP, port, volume, connexions) | 30 jours |
+| `ip_info` | Cache pays / organisation par adresse | renouvelé tous les 30 jours |
+| `discord_messages` | Alertes en attente de réaction | expirent après 24 h |
 
-## Principes
+`geo.db` (séparée) contient les plages DB-IP, indexées sur leur début.
 
-- **Le Wi-Fi d'abord** : chaque choix est mesuré. L'accélération matérielle (MediaTek HNAT) a été
-  désactivée pour permettre le comptage du trafic : speedtest 86 Mbps avant, 90 Mbps après, processeur
-  à 80 % inactif à pleine charge. La connexion (≈ 100 Mbps) reste le facteur limitant, pas le routeur.
-- **Rien sur la flash interne** : toutes les données vont sur la clé USB.
-- **Réinstallable** : un script d'installation remet tout en place après une mise à jour du firmware.
-- **Vie privée** : données minimales, durée de conservation limitée, accès restreint.
+## Sécurité
+
+| Couche | Mesure |
+|---|---|
+| Réseau | Wi-Fi WPA2/WPA3 ; liste blanche : seuls les appareils approuvés accèdent à Internet |
+| Accès au tableau de bord | Écoute sur l'IP LAN uniquement ; pare-feu limité au PC d'administration (MAC + IP) |
+| Authentification | HTTP Basic, mot de passe stocké sous forme d'empreinte (`/etc/beryl-cyber/httpd.conf`, root uniquement) ; sans mot de passe, le tableau de bord ne démarre pas (*fail-closed*) |
+| Écriture | POST uniquement, `Content-Type` dédié (protection CSRF), vérification de l'origine |
+| Entrées | MAC, IP et noms validés ou filtrés avant tout SQL ; affichage par `textContent` (anti-XSS) |
+| Accès SSH | Clé ed25519 depuis le PC |
+| Secrets | Jeton Discord dans la configuration sur la clé (`chmod 600`), jamais dans le dépôt |
+| Discord | Aucun port ouvert (requêtes sortantes) ; seules les réactions de l'administrateur comptent |
+
+## Choix techniques mesurés
+
+- **Accélération matérielle désactivée.** Le HNAT MediaTek fait passer les paquets à côté du
+  pare-feu : ils ne sont alors ni comptés, ni visibles. Mesures : 86 Mbps avec, 90 Mbps sans,
+  processeur à 80 % inactif à pleine charge. La connexion (≈ 100 Mbps) reste le facteur limitant.
+- **Recherche géographique en SQL plutôt qu'en awk.** Voir les incidents ci-dessous.
+- **Sessions plutôt qu'une ligne par minute** : quelques centaines de lignes par an au lieu de
+  plusieurs centaines de milliers, et moins d'écritures sur la clé.
+- **Graphiques et carte dessinés en SVG**, sans bibliothèque ni ressource externe : le tableau de
+  bord fonctionne sans Internet et ne divulgue rien à un tiers.
+- **Données sur la clé, service sur la flash** : la flash n'est jamais usée par les écritures, et le
+  service démarre avant que la clé soit montée (le lanceur l'attend).
+
+## Incidents résolus
+
+| Symptôme | Cause | Correction |
+|---|---|---|
+| Service disparu après une nuit | Mise à jour du firmware : fichiers ajoutés effacés | `install.sh` + ajout à `/etc/sysupgrade.conf` |
+| « collecte : ARRÊTÉE » alors qu'elle tournait | Sans terminal, `ps` (BusyBox) coupe les lignes à 80 caractères | Détection via `/proc/*/cmdline` |
+| Base des fabricants vide | `awk -F '\t'` interprété différemment selon la version | Analyse indépendante du séparateur |
+| Plages géographiques fausses | `awk` (BusyBox) écrit les grands nombres en notation scientifique | `printf "%.0f"` |
+| Organisations fausses par lots | Comparaisons texte au lieu de numériques dans `awk` | Recherche déplacée dans SQLite |
+| Organisations « inconnues » | Concurrence : base des organisations encore en téléchargement | Recherche seulement quand les deux bases sont prêtes, nouvel essai après 1 h |
+| iPad bloqué mais navigue | L'iPad utilisait le Wi-Fi de la box (compteur du pare-feu à 0) | Vérifier le chemin du trafic avant d'accuser le filtre |
+| Nom du PC remplacé | Le nom du bail DHCP statique écrasait celui du PC | Bail sans option `name` |
+
+## Vie privée
+
+Les destinations révèlent les habitudes des personnes connectées. Le projet ne voit jamais le
+contenu des échanges (HTTPS), conserve le détail 30 jours au maximum, le rend accessible au seul
+poste d'administration, et les occupants sont informés de la supervision.
