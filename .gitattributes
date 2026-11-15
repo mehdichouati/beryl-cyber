@@ -1,5 +1,7 @@
-# Les scripts tournent sur le routeur (Linux) : fins de ligne LF obligatoires
-*.sh   text eol=lf
-*.sql  text eol=lf
-*.conf text eol=lf
-router/** text eol=lf
+# Tout le dépôt en fins de ligne LF : les fichiers sont destinés au routeur (Linux)
+* text=auto eol=lf
+
+# Fichiers binaires : ne jamais convertir
+*.png binary
+*.jpg binary
+*.ico binary
