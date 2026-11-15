@@ -26,7 +26,7 @@ inventaire des appareils, historique de présence, alertes et tableau de bord we
 - [ ] Bande passante par appareil
 - [ ] Destinations par appareil (IP, domaines, pays)
 - [ ] Graphiques
-- [ ] Notifications Discord et approbation à distance par réaction
+- [x] Notifications Discord et approbation à distance par réaction
 
 ### V3 : DNS et confidentialité
 - [ ] Historique DNS par appareil, catégories, filtrage
