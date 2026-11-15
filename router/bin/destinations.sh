@@ -66,7 +66,7 @@ sqlite3 -separator ' ' "$DB" "SELECT last_ip, mac FROM devices WHERE last_ip IS 
         if (!(lan in mac) || private(remote) || id == "") next
         up = f["bytes1"] + 0; down = f["bytes2"] + 0
         total = up + down
-        print id, total > newstate
+        printf "%s %.0f\n", id, total > newstate
         if (id in prev) {
             d = total - prev[id]
             if (d <= 0) next
@@ -84,7 +84,7 @@ sqlite3 -separator ' ' "$DB" "SELECT last_ip, mac FROM devices WHERE last_ip IS 
         print "BEGIN;"
         for (k in RX) {
             split(k, p, SUBSEP)
-            printf "INSERT INTO destinations (mac, day, ip, proto, port, rx, tx, conns) VALUES (\x27%s\x27,\x27%s\x27,\x27%s\x27,\x27%s\x27,%d,%d,%d,%d)", p[1], day, p[2], p[3], p[4], RX[k], TX[k], CN[k]
+            printf "INSERT INTO destinations (mac, day, ip, proto, port, rx, tx, conns) VALUES (\x27%s\x27,\x27%s\x27,\x27%s\x27,\x27%s\x27,%d,%.0f,%.0f,%d)", p[1], day, p[2], p[3], p[4], RX[k], TX[k], CN[k]
             print " ON CONFLICT (mac, day, ip, proto, port) DO UPDATE SET rx = rx + excluded.rx, tx = tx + excluded.tx, conns = conns + excluded.conns;"
         }
         print "COMMIT;"
@@ -94,39 +94,33 @@ sqlite3 -separator ' ' "$DB" "SELECT last_ip, mac FROM devices WHERE last_ip IS 
 rm -f /tmp/beryl-ipmac.$$
 
 # --- 2. Pays et organisation des nouvelles adresses ------------------------------
-# Recherche par fusion : adresses triées et plages triées, lues une seule fois.
-lookup() {    # lookup FICHIER_PLAGES < liste "entier ip"
-    sort -n | awk -v ranges="$1" '
-        { want[++n] = $1; ipof[n] = $2 }
-        END {
-            i = 1
-            while ((getline line < ranges) > 0 && i <= n) {
-                split(line, r, " ")
-                while (i <= n && want[i] < r[1] + 0) i++
-                rest = line; sub(/^[^ ]+ [^ ]+ /, "", rest)      # valeur complète (peut contenir des espaces)
-                while (i <= n && want[i] <= r[2] + 0) { print ipof[i], rest; i++ }
-            }
-        }'
-}
+# Recherche en SQL dans geo.db : pour chaque adresse, la plage dont le début est le plus
+# grand début <= adresse (index sur start), puis vérification que l'adresse est <= fin.
+GEO_DB="$DATA_DIR/geo.db"
 
+# Adresses jamais recherchées, ou recherchées sans résultat il y a plus d'une heure
 unknown="$(sqlite3 "$DB" "SELECT DISTINCT d.ip FROM destinations d LEFT JOIN ip_info i ON i.ip = d.ip
-                          WHERE i.ip IS NULL AND d.day = '$today' LIMIT 500;" 2>/dev/null)"
-if [ -n "$unknown" ] && [ -f "$DATA_DIR/geo-country.txt" ]; then
-    echo "$unknown" | awk -F. '{ printf "%.0f %s\n", ((($1 * 256 + $2) * 256 + $3) * 256 + $4), $0 }' > /tmp/beryl-want.$$
-    lookup "$DATA_DIR/geo-country.txt" < /tmp/beryl-want.$$ > /tmp/beryl-cc.$$
-    if [ -f "$DATA_DIR/geo-asn.txt" ]; then lookup "$DATA_DIR/geo-asn.txt" < /tmp/beryl-want.$$ > /tmp/beryl-asn.$$; else : > /tmp/beryl-asn.$$; fi
+                          WHERE d.day = '$today'
+                            AND (i.ip IS NULL OR ((i.org IS NULL OR i.country IS NULL) AND i.updated < $now - 3600))
+                          LIMIT 500;" 2>/dev/null)"
+
+if [ -n "$unknown" ] && [ -f "$GEO_DB" ]; then
     {
+        echo "ATTACH '$GEO_DB' AS g;"
         echo "BEGIN;"
-        awk -v now="$now" '
-            FILENAME ~ /cc/  { cc[$1] = $2; next }
-            FILENAME ~ /asn/ { split($2, a, "|"); asn[$1] = a[1] + 0; o = $0; sub(/^[^ ]+ [^|]*\|/, "", o); org[$1] = o; next }
-            { ip = $2
-              printf "INSERT OR REPLACE INTO ip_info (ip, country, asn, org, updated) VALUES (\x27%s\x27, %s, %s, %s, %d);\n", ip,
-                     (ip in cc) ? "\x27" cc[ip] "\x27" : "NULL", (ip in asn) ? asn[ip] : "NULL",
-                     (ip in org) ? "\x27" org[ip] "\x27" : "NULL", now }' /tmp/beryl-cc.$$ /tmp/beryl-asn.$$ /tmp/beryl-want.$$
-        echo "COMMIT;"
+        echo "CREATE TEMP TABLE w (ip TEXT PRIMARY KEY, n INTEGER);"
+        echo "$unknown" | awk -F. 'NF == 4 { printf "INSERT OR IGNORE INTO w VALUES (\x27%s\x27, %.0f);\n", $0, ((($1 * 256 + $2) * 256 + $3) * 256 + $4) }'
+        cat <<SQL
+INSERT OR REPLACE INTO ip_info (ip, country, asn, org, updated)
+SELECT w.ip,
+       (SELECT c.cc  FROM g.country c WHERE c.start = (SELECT MAX(start) FROM g.country WHERE start <= w.n) AND c.end >= w.n),
+       (SELECT a.asn FROM g.asn a     WHERE a.start = (SELECT MAX(start) FROM g.asn     WHERE start <= w.n) AND a.end >= w.n),
+       (SELECT a.org FROM g.asn a     WHERE a.start = (SELECT MAX(start) FROM g.asn     WHERE start <= w.n) AND a.end >= w.n),
+       $now
+FROM w;
+COMMIT;
+SQL
     } | sqlite3 "$DB" 2>/dev/null
-    rm -f /tmp/beryl-want.$$ /tmp/beryl-cc.$$ /tmp/beryl-asn.$$
 fi
 
 # --- 3. Durée de conservation ------------------------------------------------------

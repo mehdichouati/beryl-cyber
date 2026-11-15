@@ -23,8 +23,8 @@ inventaire des appareils, historique de présence, alertes et tableau de bord we
 - [x] Liste blanche dans le pare-feu (iptables)
 
 ### V2 : trafic et notifications
-- [ ] Bande passante par appareil
-- [ ] Destinations par appareil (IP, domaines, pays)
+- [x] Bande passante par appareil
+- [x] Destinations par appareil (organisation, pays, service)
 - [ ] Graphiques
 - [x] Notifications Discord et approbation à distance par réaction
 
@@ -73,4 +73,4 @@ docs/            documentation (architecture, choix techniques)
 
 ## Stack
 
-Shell (ash) · OpenWrt · SQLite · HTML/CSS/JavaScript · iptables · uhttpd · procd
+Shell (ash) · OpenWrt · SQLite · HTML/CSS/JavaScript · iptables · conntrack · uhttpd · procd · API Discord

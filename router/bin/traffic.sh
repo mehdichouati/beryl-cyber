@@ -43,7 +43,7 @@ iptables -L "$CHAIN" -n -v -x -Z 2>/dev/null | awk -v day="$today" '
             rx = bytes[m, "rx"] + 0; tx = bytes[m, "tx"] + 0
             if (rx == 0 && tx == 0) continue
             if (n++ == 0) print "BEGIN;"
-            printf "INSERT INTO traffic (mac, day, rx, tx) VALUES (\x27%s\x27, \x27%s\x27, %d, %d)\n", m, day, rx, tx
+            printf "INSERT INTO traffic (mac, day, rx, tx) VALUES (\x27%s\x27, \x27%s\x27, %.0f, %.0f)\n", m, day, rx, tx
             print "  ON CONFLICT (mac, day) DO UPDATE SET rx = rx + excluded.rx, tx = tx + excluded.tx;"
         }
         if (n > 0) print "COMMIT;"

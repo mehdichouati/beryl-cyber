@@ -54,7 +54,7 @@ if [ ! -f "$BASE/data/oui.txt" ]; then
     sh "$APP/router/bin/update-oui.sh" || echo "    (non bloquant : à relancer plus tard)"
 fi
 
-if [ ! -f "$BASE/data/geo-country.txt" ]; then
+if [ ! -f "$BASE/data/geo.db" ]; then
     step "Base de géolocalisation (DB-IP)"
     sh "$APP/router/bin/update-geoip.sh" || echo "    (non bloquant : à relancer plus tard)"
 fi
