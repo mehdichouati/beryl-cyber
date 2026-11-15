@@ -158,6 +158,8 @@ init_db || { log "impossible de créer la base $DB"; exit 1; }
 if [ "$1" = "--loop" ]; then
     while true; do
         collect_once
+        # Bande passante par appareil
+        [ -x "$APP_DIR/router/bin/traffic.sh" ] && "$APP_DIR/router/bin/traffic.sh"
         # Notifications Discord (sans effet si Discord n'est pas configuré)
         [ -x "$APP_DIR/router/bin/notify.sh" ] && "$APP_DIR/router/bin/notify.sh"
         sleep "$COLLECT_INTERVAL"

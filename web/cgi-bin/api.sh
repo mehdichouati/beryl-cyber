@@ -41,10 +41,14 @@ case "$q" in
         ;;
     devices)
         reply "$(query_json "
-            SELECT mac, hostname, alias, vendor, random_mac, last_ip,
-                   status, online, first_seen, last_seen
-            FROM devices
-            ORDER BY online DESC, last_seen DESC;")"
+            SELECT d.mac, d.hostname, d.alias, d.vendor, d.random_mac, d.last_ip,
+                   d.status, d.online, d.first_seen, d.last_seen,
+                   COALESCE((SELECT rx FROM traffic t WHERE t.mac = d.mac AND t.day = date('now','localtime')), 0) AS rx_today,
+                   COALESCE((SELECT tx FROM traffic t WHERE t.mac = d.mac AND t.day = date('now','localtime')), 0) AS tx_today,
+                   COALESCE((SELECT SUM(rx + tx) FROM traffic t WHERE t.mac = d.mac
+                             AND t.day >= date('now','localtime','start of month')), 0) AS total_month
+            FROM devices d
+            ORDER BY d.online DESC, d.last_seen DESC;")"
         ;;
     events)
         reply "$(query_json "

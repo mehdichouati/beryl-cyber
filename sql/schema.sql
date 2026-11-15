@@ -63,3 +63,13 @@ CREATE TABLE IF NOT EXISTS discord_messages (
                 CHECK (state IN ('open', 'approved', 'blocked', 'expired'))
 );
 CREATE INDEX IF NOT EXISTS idx_discord_open ON discord_messages (state) WHERE state = 'open';
+
+-- Consommation par appareil et par jour (octets)
+CREATE TABLE IF NOT EXISTS traffic (
+    mac  TEXT NOT NULL REFERENCES devices(mac) ON DELETE CASCADE,
+    day  TEXT NOT NULL,                     -- AAAA-MM-JJ (heure locale)
+    rx   INTEGER NOT NULL DEFAULT 0,        -- reçu par l'appareil (téléchargement)
+    tx   INTEGER NOT NULL DEFAULT 0,        -- envoyé par l'appareil (envoi)
+    PRIMARY KEY (mac, day)
+);
+CREATE INDEX IF NOT EXISTS idx_traffic_day ON traffic (day);

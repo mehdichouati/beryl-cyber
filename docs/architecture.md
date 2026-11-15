@@ -29,7 +29,9 @@ son propre DHCP et fait du NAT. Seuls les appareils connectés au Beryl sont sup
 
 ## Principes
 
-- **Le Wi-Fi d'abord** : l'accélération matérielle reste activée, les scripts restent légers.
+- **Le Wi-Fi d'abord** : chaque choix est mesuré. L'accélération matérielle (MediaTek HNAT) a été
+  désactivée pour permettre le comptage du trafic : speedtest 86 Mbps avant, 90 Mbps après, processeur
+  à 80 % inactif à pleine charge. La connexion (≈ 100 Mbps) reste le facteur limitant, pas le routeur.
 - **Rien sur la flash interne** : toutes les données vont sur la clé USB.
 - **Réinstallable** : un script d'installation remet tout en place après une mise à jour du firmware.
 - **Vie privée** : données minimales, durée de conservation limitée, accès restreint.
