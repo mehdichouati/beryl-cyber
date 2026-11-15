@@ -18,7 +18,7 @@
   header h1 { margin: 0; font-size: 20px; letter-spacing: .5px; }
   header h1 span { color: var(--accent); }
   #updated { color: var(--muted); font-size: 13px; margin-left: auto; }
-  main { max-width: 1100px; margin: 0 auto; padding: 24px; display: grid; gap: 24px; }
+  main { max-width: 1320px; margin: 0 auto; padding: 24px; display: grid; gap: 24px; }
   .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; }
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
   .card .label { color: var(--muted); font-size: 13px; }
@@ -28,7 +28,7 @@
   section h2 { margin: 0; padding: 14px 16px; font-size: 15px; border-bottom: 1px solid var(--line); }
   .scroll { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; }
-  th, td { padding: 10px 16px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
   th { color: var(--muted); font-weight: 500; font-size: 13px; }
   tr:last-child td { border-bottom: 0; }
   .mono { font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
@@ -47,6 +47,16 @@
   .ev-new_device { color: var(--warn); }
   .ev-online { color: var(--ok); }
   .ev-offline { color: var(--off); }
+  button { font: inherit; font-size: 13px; color: var(--text); background: transparent;
+           border: 1px solid var(--line); border-radius: 6px; padding: 3px 10px; cursor: pointer; }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  button.ok:hover { border-color: var(--ok); color: var(--ok); }
+  button.bad:hover { border-color: var(--bad); color: var(--bad); }
+  button.icon { border: 0; padding: 0 6px; color: var(--muted); }
+  .actions { display: flex; gap: 6px; }
+  .card button { margin-top: 8px; }
+  input.rename { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--accent);
+                 border-radius: 6px; padding: 2px 8px; width: 180px; }
   #error { display: none; background: #3d1d1d; border: 1px solid var(--bad); color: #ffb3ad;
            padding: 12px 16px; border-radius: 10px; }
 </style>
@@ -65,14 +75,15 @@
     <div class="card"><div class="label">En ligne</div><div class="value" id="c-online">–</div></div>
     <div class="card"><div class="label">Appareils connus</div><div class="value" id="c-total">–</div></div>
     <div class="card"><div class="label">En attente d'approbation</div><div class="value" id="c-pending">–</div></div>
-    <div class="card alert"><div class="label">Nouveaux appareils non lus</div><div class="value" id="c-alerts">–</div></div>
+    <div class="card alert"><div class="label">Nouveaux appareils non lus</div><div class="value" id="c-alerts">–</div>
+      <button id="mark-seen" hidden>Tout marquer comme lu</button></div>
   </div>
 
   <section>
     <h2>Appareils</h2>
     <div class="scroll">
       <table>
-        <thead><tr><th>Appareil</th><th>IP</th><th>MAC</th><th>Statut</th><th>Vu pour la dernière fois</th><th>Première apparition</th></tr></thead>
+        <thead><tr><th>Appareil</th><th>IP</th><th>MAC</th><th>Statut</th><th>Vu pour la dernière fois</th><th>Première apparition</th><th>Actions</th></tr></thead>
         <tbody id="devices"></tbody>
       </table>
     </div>
@@ -124,12 +135,59 @@ async function get(q) {
   return data;
 }
 
+// Écriture : Content-Type propre au projet (exigé par action.sh, protection CSRF)
+async function post(params) {
+  const r = await fetch("/cgi-bin/action.sh", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-beryl-form" },
+    body: new URLSearchParams(params).toString()
+  });
+  const data = await r.json().catch(() => ({ error: "réponse invalide" }));
+  if (!r.ok || data.error) throw new Error(data.error || "HTTP " + r.status);
+}
+
+async function act(params) {
+  try { await post(params); await refresh(); }
+  catch (err) { showError("Action impossible : " + err.message); }
+}
+
+function showError(msg) {
+  const box = document.getElementById("error");
+  box.textContent = msg;
+  box.style.display = "block";
+}
+
+function startRename(cell, d) {
+  const input = el("input", "rename");
+  const original = d.alias || d.hostname || "";
+  input.value = original;
+  input.maxLength = 40;
+  cell.replaceChildren(input);
+  input.focus();
+  input.select();
+  let done = false;
+  const finish = (save) => {
+    if (done) return;
+    done = true;
+    input.blur();
+    const value = input.value.trim();
+    if (save && value !== original) act({ action: "rename", mac: d.mac, value });
+    else refresh();
+  };
+  input.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") finish(true);
+    if (ev.key === "Escape") finish(false);
+  });
+  input.addEventListener("blur", () => finish(true));
+}
+
 function renderSummary(s) {
   serverNow = Number(s.now) || serverNow;
   document.getElementById("c-online").textContent = s.online;
   document.getElementById("c-total").textContent = s.total;
   document.getElementById("c-pending").textContent = s.pending;
   document.getElementById("c-alerts").textContent = s.alerts;
+  document.getElementById("mark-seen").hidden = !(Number(s.alerts) > 0);
 }
 
 function renderDevices(list) {
@@ -137,7 +195,7 @@ function renderDevices(list) {
   body.replaceChildren();
   if (!list.length) {
     const tr = el("tr"); const td = el("td", "muted", "Aucun appareil pour l'instant.");
-    td.colSpan = 6; tr.append(td); body.append(tr); return;
+    td.colSpan = 7; tr.append(td); body.append(tr); return;
   }
   for (const d of list) {
     const tr = el("tr");
@@ -146,9 +204,27 @@ function renderDevices(list) {
     name.append(el("span", "dot" + (d.online ? " on" : "")));
     name.append(document.createTextNode(d.alias || d.hostname || "Appareil inconnu"));
     if (d.random_mac) name.append(el("span", "tag", "MAC aléatoire"));
+    const edit = el("button", "icon", "✎");
+    edit.title = "Renommer";
+    edit.addEventListener("click", () => startRename(name, d));
+    name.append(edit);
 
     const status = el("td");
     status.append(el("span", "tag " + d.status, STATUS[d.status] || d.status));
+
+    const actions = el("td");
+    const box = el("div", "actions");
+    if (d.status !== "approved") {
+      const b = el("button", "ok", "Approuver");
+      b.addEventListener("click", () => act({ action: "status", mac: d.mac, value: "approved" }));
+      box.append(b);
+    }
+    if (d.status !== "blocked") {
+      const b = el("button", "bad", "Bloquer");
+      b.addEventListener("click", () => act({ action: "status", mac: d.mac, value: "blocked" }));
+      box.append(b);
+    }
+    actions.append(box);
 
     tr.append(
       name,
@@ -156,7 +232,8 @@ function renderDevices(list) {
       el("td", "mono", d.mac),
       status,
       el("td", "", d.online ? "en ligne" : ago(d.last_seen)),
-      el("td", "muted", fmt(d.first_seen))
+      el("td", "muted", fmt(d.first_seen)),
+      actions
     );
     body.append(tr);
   }
@@ -177,6 +254,7 @@ function renderEvents(list) {
 }
 
 async function refresh() {
+  if (document.activeElement && document.activeElement.classList.contains("rename")) return;
   const box = document.getElementById("error");
   try {
     const [s, d, e] = await Promise.all([get("summary"), get("devices"), get("events")]);
@@ -187,10 +265,11 @@ async function refresh() {
     document.getElementById("updated").textContent =
       "Mis à jour à " + new Date().toLocaleTimeString("fr-BE");
   } catch (err) {
-    box.textContent = "Impossible de lire les données : " + err.message;
-    box.style.display = "block";
+    showError("Impossible de lire les données : " + err.message);
   }
 }
+
+document.getElementById("mark-seen").addEventListener("click", () => act({ action: "seen" }));
 
 refresh();
 setInterval(refresh, REFRESH_MS);
