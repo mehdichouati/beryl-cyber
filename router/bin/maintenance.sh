@@ -43,6 +43,9 @@ refresh() {    # refresh FICHIER SCRIPT NOM
 refresh "$DATA_DIR/geo.db"  update-geoip.sh geo
 refresh "$DATA_DIR/oui.txt" update-oui.sh   oui
 
+# DNS forcé : vérifie à chaque cycle que la redirection suit l'état d'AdGuard Home
+[ -x "$BIN/dns-force.sh" ] && "$BIN/dns-force.sh"
+
 # Cache des adresses : renouvelé tous les 30 jours
 [ -f "$DB" ] && sqlite3 "$DB" "DELETE FROM ip_info WHERE updated < $(( $(date +%s) - 30 * 86400 ));" 2>/dev/null
 exit 0

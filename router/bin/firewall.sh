@@ -62,8 +62,9 @@ mkdir -p /etc/beryl-cyber
 cat > /etc/beryl-cyber/firewall.include <<'INC'
 #!/bin/sh
 # Beryl CYBER : réapplique la liste blanche après un rechargement du pare-feu
-WL=/mnt/beryl/beryl-cyber/app/router/bin/whitelist.sh
-[ -x "$WL" ] && "$WL"
+BIN=/mnt/beryl/beryl-cyber/app/router/bin
+[ -x "$BIN/whitelist.sh" ] && "$BIN/whitelist.sh"
+[ -x "$BIN/dns-force.sh" ] && "$BIN/dns-force.sh"
 exit 0
 INC
 chmod 755 /etc/beryl-cyber/firewall.include

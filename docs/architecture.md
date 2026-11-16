@@ -48,6 +48,9 @@ DHCP et du NAT. Il voit donc tout le trafic des appareils qui lui sont connecté
 | `router/bin/destinations.sh` | Destinations par appareil depuis conntrack, enrichies (pays, organisation) en SQL dans `geo.db` |
 | `router/bin/whitelist.sh` | Liste blanche et blocages (chaîne iptables `BERYL_WL`), coupure des connexions en cours via conntrack |
 | `router/bin/notify.sh` | Alerte Discord pour chaque nouvel appareil, approbation ou blocage par réaction ✅ / ⛔ |
+| `router/bin/dns.sh` | Historique DNS par appareil, lu dans le journal d'AdGuard Home (fichier sur la clé, lecture incrémentale) |
+| `router/bin/adguard-setup.sh` | Réglages d'AdGuard : journal 24 h écrit sur la clé, interface (port 3000) réservée au PC d'administration |
+| `router/bin/dns-force.sh` | DNS forcé : tout le port 53 du LAN redirigé vers AdGuard, DNS-over-TLS/HTTPS bloqué ; retiré automatiquement si AdGuard s'arrête |
 | `router/bin/maintenance.sh` | Mise à jour mensuelle des bases DB-IP et OUI, renouvellement du cache d'adresses |
 | `router/bin/firewall.sh` | Bail DHCP fixe et règles d'accès au port 8080 pour le PC d'administration |
 | `router/install.sh` | Installation idempotente ; protège le service des mises à jour du firmware (`/etc/sysupgrade.conf`) |
@@ -64,6 +67,7 @@ DHCP et du NAT. Il voit donc tout le trafic des appareils qui lui sont connecté
 | `events` | Nouvel appareil, en ligne, hors ligne, changement d'IP, approuvé, bloqué | permanente |
 | `traffic` | Octets reçus/envoyés par appareil et par jour | permanente (très petite) |
 | `destinations` | Destinations par appareil et par jour (IP, port, volume, connexions) | 30 jours |
+| `dns_queries` | Domaines demandés par appareil et par jour (requêtes, dont bloquées) ; jamais pour un appareil « privé » | 7 jours |
 | `ip_info` | Cache pays / organisation par adresse | renouvelé tous les 30 jours |
 | `discord_messages` | Alertes en attente de réaction | expirent après 24 h |
 
@@ -81,6 +85,7 @@ DHCP et du NAT. Il voit donc tout le trafic des appareils qui lui sont connecté
 | Accès SSH | Clé ed25519 depuis le PC |
 | Secrets | Jeton Discord dans la configuration sur la clé (`chmod 600`), jamais dans le dépôt |
 | Discord | Aucun port ouvert (requêtes sortantes) ; seules les réactions de l'administrateur comptent |
+| DNS | Filtrage publicités/pistage (AdGuard Home) ; DNS forcé ; interface AdGuard limitée au PC et protégée par l'authentification GL.iNet |
 
 ## Choix techniques mesurés
 
@@ -106,10 +111,18 @@ DHCP et du NAT. Il voit donc tout le trafic des appareils qui lui sont connecté
 | Organisations fausses par lots | Comparaisons texte au lieu de numériques dans `awk` | Recherche déplacée dans SQLite |
 | Organisations « inconnues » | Concurrence : base des organisations encore en téléchargement | Recherche seulement quand les deux bases sont prêtes, nouvel essai après 1 h |
 | iPad bloqué mais navigue | L'iPad utilisait le Wi-Fi de la box (compteur du pare-feu à 0) | Vérifier le chemin du trafic avant d'accuser le filtre |
+| Journal DNS impossible à lire | API AdGuard protégée par GL.iNet (401), journal en mémoire seulement | Journal écrit dans un fichier sur la clé, lu directement |
+| Appareils contournant AdGuard | GL.iNet ne redirige que le DNS adressé au routeur (`--dst-type LOCAL`) | Redirection de tout le port 53 + blocage du DNS chiffré |
 | Nom du PC remplacé | Le nom du bail DHCP statique écrasait celui du PC | Bail sans option `name` |
 
 ## Vie privée
 
-Les destinations révèlent les habitudes des personnes connectées. Le projet ne voit jamais le
-contenu des échanges (HTTPS), conserve le détail 30 jours au maximum, le rend accessible au seul
-poste d'administration, et les occupants sont informés de la supervision.
+Les destinations et surtout l'historique DNS révèlent les habitudes des personnes connectées.
+Le projet applique les principes du RGPD :
+
+- **Minimisation** : jamais le contenu des échanges (HTTPS) ; seulement domaines, destinations, volumes.
+- **Conservation limitée** : historique DNS 7 jours, destinations 30 jours, journal AdGuard 24 h.
+- **Droit d'opposition et d'effacement** : un appareil « privé » n'est plus historisé et son
+  historique est effacé immédiatement ; il reste protégé par le filtrage.
+- **Accès restreint** : poste d'administration uniquement, avec mot de passe.
+- **Transparence** : les occupants sont informés de la supervision.

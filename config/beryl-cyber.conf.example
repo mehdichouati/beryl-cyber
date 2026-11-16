@@ -38,3 +38,6 @@ DEST_RETENTION_DAYS=30
 
 # Durée de conservation de l'historique DNS (jours)
 DNS_RETENTION_DAYS=7
+
+# DNS forcé : 1 = tout le DNS du réseau passe par AdGuard, DNS chiffré bloqué
+DNS_FORCE=1

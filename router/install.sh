@@ -76,6 +76,11 @@ sh "$APP/router/bin/firewall.sh"
 step "AdGuard Home (DNS)"
 sh "$APP/router/bin/adguard-setup.sh" || echo "    (non bloquant)"
 
+step "DNS forcé"
+sh "$APP/router/bin/dns-force.sh" && iptables -t nat -C PREROUTING -i br-lan -j BERYL_DNS 2>/dev/null \
+    && echo "    tout le DNS du réseau passe par AdGuard, DNS chiffré bloqué" \
+    || echo "    inactif (AdGuard Home arrêté ou DNS_FORCE=0)"
+
 step "Protection contre les mises à jour du firmware"
 for f in /etc/init.d/beryl-cyber /usr/sbin/beryl-cyber-launch /etc/rc.d/S99beryl-cyber /etc/rc.d/K10beryl-cyber /etc/beryl-cyber/ /etc/sysctl.d/90-beryl-cyber.conf; do
     grep -qxF "$f" /etc/sysupgrade.conf 2>/dev/null || echo "$f" >> /etc/sysupgrade.conf
