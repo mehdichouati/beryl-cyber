@@ -26,6 +26,9 @@ query_json() {
 mac=$(echo "$QUERY_STRING" | sed -n 's/^.*mac=\([0-9a-fA-F:%A]*\).*$/\1/p' | sed 's/%3[Aa]/:/g' | tr 'A-F' 'a-f')
 echo "$mac" | grep -qE '^([0-9a-f]{2}:){5}[0-9a-f]{2}$' || mac=""
 
+# Code pays demandé (carte) : deux lettres majuscules, sinon ignoré
+cc=$(echo "$QUERY_STRING" | sed -n 's/^.*cc=\([A-Za-z][A-Za-z]\).*$/\1/p' | tr 'a-z' 'A-Z')
+
 # Seule la valeur de q est lue, et uniquement parmi une liste fixe : aucune donnée
 # de la requête HTTP n'est insérée dans le SQL.
 q=$(echo "$QUERY_STRING" | sed -n 's/^.*q=\([a-z]*\).*$/\1/p')
@@ -100,6 +103,22 @@ case "$q" in
             FROM dns_queries
             WHERE mac = '$mac' AND day = date('now','localtime')
             GROUP BY domain ORDER BY SUM(count) DESC LIMIT 40;")"
+        ;;
+    country)
+        [ -n "$cc" ] || { reply '{"error":"pays invalide"}'; exit 0; }
+        reply "$(query_json "
+            SELECT COALESCE(v.alias, v.hostname, v.mac) AS device,
+                   COALESCE(n.domain, i.org, d.ip) AS site,
+                   i.org AS org,
+                   SUM(d.rx) AS rx, SUM(d.tx) AS tx, SUM(d.conns) AS conns
+            FROM destinations d
+            JOIN ip_info i ON i.ip = d.ip
+            JOIN devices v ON v.mac = d.mac
+            LEFT JOIN dns_ip n ON n.mac = d.mac AND n.ip = d.ip
+            WHERE d.day = date('now','localtime') AND i.country = '$cc'
+            GROUP BY v.mac, COALESCE(n.domain, i.org, d.ip)
+            ORDER BY SUM(d.rx + d.tx) DESC
+            LIMIT 60;")"
         ;;
     destinations)
         [ -n "$mac" ] || { reply '{"error":"MAC invalide"}'; exit 0; }

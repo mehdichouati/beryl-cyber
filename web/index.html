@@ -78,6 +78,8 @@
   #map svg { max-width: 960px; margin: 0 auto; }
   #map svg path { stroke: var(--panel); stroke-width: .6; }
   #map svg path:hover { stroke: var(--text); stroke-width: 1; }
+  #map svg path.has-data { cursor: pointer; }
+  #country-panel h2 { display: flex; align-items: center; gap: 12px; }
   .map-legend { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); padding: 0 16px 12px; flex-wrap: wrap; }
   .map-legend i { display: inline-block; width: 28px; height: 10px; border-radius: 2px; }
   .map-note { font-size: 12px; color: var(--muted); padding: 0 16px 14px; }
@@ -128,7 +130,16 @@
     <h2>Carte des destinations aujourd'hui (tous appareils)</h2>
     <div class="chart" id="map"></div>
     <div class="map-legend" id="map-legend"></div>
-    <div class="map-note">Le pays indiqué est celui du serveur contacté, pas celui de l'entreprise :
+    <div id="country-panel" style="display:none">
+      <h2 style="border-top:1px solid var(--line)"><span id="country-title"></span>
+        <button id="country-close" style="margin-left:auto">Fermer</button></h2>
+      <div class="scroll"><table>
+        <thead><tr><th>Appareil</th><th>Site</th><th>Organisation</th><th>Reçu / envoyé</th><th></th><th>Connexions</th></tr></thead>
+        <tbody id="country-body"></tbody>
+      </table></div>
+    </div>
+    <div class="map-note">Cliquez sur un pays coloré pour voir quels appareils lui envoient des données, et pour quel site.
+      Le pays indiqué est celui du serveur contacté, pas celui de l'entreprise :
       un grand service (Google, Netflix…) répond souvent depuis un serveur proche de chez vous.</div>
   </section>
 
@@ -517,6 +528,10 @@ async function drawMap(rows) {
                              [null, "Serveurs", String(r.ips)]] : [[null, "Aucun échange", "–"]]);
     });
     p.addEventListener("mouseleave", hideTip);
+    if (r) {
+      p.classList.add("has-data");
+      p.addEventListener("click", () => { hideTip(); showCountry(c.id); });
+    }
     s.append(p);
   }
   box.replaceChildren(s);
@@ -529,6 +544,40 @@ async function drawMap(rows) {
   legend.append(el("span", "", " " + bytes(Math.pow(10, lmax))));
   const top = rows.slice(0, 3).map(r => regionName(r.cc)).join(", ");
   legend.append(el("span", "", "  ·  " + rows.length + " pays contactés · en tête : " + top));
+}
+
+// Détail d'un pays : quels appareils, vers quels sites
+async function showCountry(cc) {
+  const panel = document.getElementById("country-panel");
+  const body = document.getElementById("country-body");
+  document.getElementById("country-title").textContent = regionName(cc) + " : appareils et sites aujourd'hui";
+  panel.style.display = "block";
+  body.replaceChildren();
+  try {
+    const list = await get("country&cc=" + encodeURIComponent(cc));
+    if (!list.length) {
+      const tr = el("tr"); const td = el("td", "muted", "Aucun échange enregistré.");
+      td.colSpan = 6; tr.append(td); body.append(tr); return;
+    }
+    const max = Math.max(1, ...list.map(x => Number(x.rx) + Number(x.tx)));
+    for (const r of list) {
+      const total = Number(r.rx) + Number(r.tx);
+      const vol = el("td", "mono");
+      vol.append(el("span", "", "↓ " + bytes(r.rx)), el("span", "muted", "  ↑ " + bytes(r.tx)));
+      const barCell = el("td");
+      const bar = el("div", "bar"); bar.style.width = Math.max(2, Math.round(120 * total / max)) + "px";
+      barCell.append(bar);
+      const tr = el("tr");
+      // Site connu grâce aux réponses DNS ; sinon seule l'organisation est connue
+      const known = r.site && r.site !== r.org;
+      const site = known ? el("td", "mono", r.site) : el("td", "muted", "site non identifié");
+      if (!known) site.title = "Aucune réponse DNS enregistrée pour cette adresse (connexion directe, appareil privé ou DNS antérieur au relevé)";
+      tr.append(el("td", "", r.device), site, el("td", "muted", r.org || "–"),
+                vol, barCell, el("td", "muted", String(r.conns)));
+      body.append(tr);
+    }
+  } catch (err) { showError("Impossible de lire le détail du pays : " + err.message); }
+  panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 async function refreshCharts() {
@@ -637,6 +686,10 @@ async function refresh() {
     showError("Impossible de lire les données : " + err.message);
   }
 }
+
+document.getElementById("country-close").addEventListener("click", () => {
+  document.getElementById("country-panel").style.display = "none";
+});
 
 document.getElementById("dest-close").addEventListener("click", () => {
   destMac = null;

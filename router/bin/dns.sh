@@ -52,6 +52,53 @@ new_lines() {
     sqlite3 -separator ' ' "$DB" "SELECT last_ip, mac FROM devices WHERE last_ip IS NOT NULL AND private = 0;" 2>/dev/null | sed 's/^/MAP /'
     new_lines | sed 's/^/Q /'
 } | awk -v day="$today" -v now="$now" '
+    BEGIN {
+        b64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+        for (i = 1; i <= 64; i++) B64[substr(b64, i, 1)] = i - 1
+    }
+    # Décode une chaîne base64 dans le tableau global by[] ; renvoie le nombre d octets
+    function b64dec(s,   n, i, c, v, bits, acc) {
+        n = 0; bits = 0; acc = 0
+        for (i = 1; i <= length(s); i++) {
+            c = substr(s, i, 1)
+            if (c == "=") break
+            if (!(c in B64)) continue
+            acc = acc * 64 + B64[c]; bits += 6
+            if (bits >= 8) {
+                bits -= 8
+                v = int(acc / (2 ^ bits)); by[n++] = v
+                acc = acc - v * (2 ^ bits)
+            }
+        }
+        return n
+    }
+    # Saute un nom DNS (étiquettes ou pointeur de compression) ; renvoie la position suivante
+    function skipname(p, n) {
+        while (p < n) {
+            if (by[p] == 0) return p + 1
+            if (by[p] >= 192) return p + 2
+            p += by[p] + 1
+        }
+        return n
+    }
+    # Adresses IPv4 (enregistrements A) d une réponse DNS au format binaire
+    function answer_ips(s,   n, p, qd, an, i, type, rdlen, out) {
+        n = b64dec(s); out = ""
+        if (n < 12) return ""
+        qd = by[4] * 256 + by[5]; an = by[6] * 256 + by[7]
+        p = 12
+        for (i = 0; i < qd; i++) p = skipname(p, n) + 4
+        for (i = 0; i < an && p + 10 <= n; i++) {
+            p = skipname(p, n)
+            type = by[p] * 256 + by[p + 1]
+            rdlen = by[p + 8] * 256 + by[p + 9]
+            p += 10
+            if (type == 1 && rdlen == 4 && p + 4 <= n)
+                out = out " " by[p] "." by[p + 1] "." by[p + 2] "." by[p + 3]
+            p += rdlen
+        }
+        return out
+    }
     function field(name,   re, s) {
         re = "\"" name "\":\"[^\"]*\""
         if (!match($0, re)) return ""
@@ -69,6 +116,11 @@ new_lines() {
         k = mac[ip] SUBSEP d SUBSEP dom
         C[k]++
         if ($0 ~ /"IsFiltered":true/) B[k]++
+        ans = field("Answer")
+        if (ans != "") {
+            m = split(answer_ips(ans), ips, " ")
+            for (j = 1; j <= m; j++) IPD[mac[ip] SUBSEP ips[j]] = dom
+        }
     }
     END {
         n = 0
@@ -78,11 +130,18 @@ new_lines() {
             printf "INSERT INTO dns_queries (mac, day, domain, count, blocked, last_ts) VALUES (\x27%s\x27,\x27%s\x27,\x27%s\x27,%d,%d,%d)", p[1], p[2], p[3], C[k], B[k] + 0, now
             print " ON CONFLICT (mac, day, domain) DO UPDATE SET count = count + excluded.count, blocked = blocked + excluded.blocked, last_ts = excluded.last_ts;"
         }
+        for (k in IPD) {
+            if (n++ == 0) print "BEGIN;"
+            split(k, p, SUBSEP)
+            if (p[2] !~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/) continue
+            printf "INSERT OR REPLACE INTO dns_ip (mac, ip, domain, last_ts) VALUES (\x27%s\x27,\x27%s\x27,\x27%s\x27,%d);\n", p[1], p[2], IPD[k], now
+        }
         if (n > 0) print "COMMIT;"
     }' | sqlite3 "$DB" 2>/dev/null
 
 [ -n "$ino_after" ] && echo "$ino_after $pos_after" > "$STATE"
 
 # Durée de conservation
-sqlite3 "$DB" "DELETE FROM dns_queries WHERE day < date('now', 'localtime', '-$RETENTION days');" 2>/dev/null
+sqlite3 "$DB" "DELETE FROM dns_queries WHERE day < date('now', 'localtime', '-$RETENTION days');
+               DELETE FROM dns_ip WHERE last_ts < $now - $RETENTION * 86400;" 2>/dev/null
 exit 0

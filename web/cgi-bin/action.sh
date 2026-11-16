@@ -81,7 +81,7 @@ case "$action" in
         # Appareil privé : plus d'historique DNS, et l'historique existant est effacé
         valid_mac "$mac" && device_exists "$mac" || reply "404 Not Found" '{"error":"appareil inconnu"}'
         case "$value" in
-            1) sql "BEGIN; UPDATE devices SET private = 1 WHERE mac = '$mac'; DELETE FROM dns_queries WHERE mac = '$mac'; COMMIT;" ;;
+            1) sql "BEGIN; UPDATE devices SET private = 1 WHERE mac = '$mac'; DELETE FROM dns_queries WHERE mac = '$mac'; DELETE FROM dns_ip WHERE mac = '$mac'; COMMIT;" ;;
             0) sql "UPDATE devices SET private = 0 WHERE mac = '$mac';" ;;
             *) reply "400 Bad Request" '{"error":"valeur invalide"}' ;;
         esac || reply "500 Internal Server Error" '{"error":"écriture impossible"}'

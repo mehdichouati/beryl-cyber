@@ -26,7 +26,7 @@ inventaire des appareils, historique de présence, alertes et tableau de bord we
 - [x] Bande passante par appareil
 - [x] Destinations par appareil (organisation, pays, service)
 - [x] Graphiques (consommation sur 30 jours, par appareil, principales destinations)
-- [x] Carte du monde des pays contactés
+- [x] Carte du monde des pays contactés, avec le détail par pays (appareils et sites)
 - [x] Notifications Discord et approbation à distance par réaction
 
 ### V3 : DNS et confidentialité

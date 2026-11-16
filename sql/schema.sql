@@ -109,3 +109,15 @@ CREATE TABLE IF NOT EXISTS dns_queries (
     PRIMARY KEY (mac, day, domain)
 );
 CREATE INDEX IF NOT EXISTS idx_dns_day ON dns_queries (day);
+
+-- Correspondance adresse IP -> nom de domaine, par appareil (V3)
+-- Tirée des réponses DNS (enregistrements A) du journal AdGuard. Permet de dire quel site
+-- se cache derrière une destination (par exemple, quel site derrière une IP Cloudflare).
+-- Conservée 7 jours, comme l'historique DNS ; jamais pour un appareil "privé".
+CREATE TABLE IF NOT EXISTS dns_ip (
+    mac      TEXT NOT NULL REFERENCES devices(mac) ON DELETE CASCADE,
+    ip       TEXT NOT NULL,
+    domain   TEXT NOT NULL,
+    last_ts  INTEGER NOT NULL,
+    PRIMARY KEY (mac, ip)
+);
