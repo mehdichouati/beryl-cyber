@@ -73,6 +73,9 @@ chmod 755 /usr/sbin/beryl-cyber-launch /etc/init.d/beryl-cyber
 step "Pare-feu du tableau de bord"
 sh "$APP/router/bin/firewall.sh"
 
+step "AdGuard Home (DNS)"
+sh "$APP/router/bin/adguard-setup.sh" || echo "    (non bloquant)"
+
 step "Protection contre les mises à jour du firmware"
 for f in /etc/init.d/beryl-cyber /usr/sbin/beryl-cyber-launch /etc/rc.d/S99beryl-cyber /etc/rc.d/K10beryl-cyber /etc/beryl-cyber/ /etc/sysctl.d/90-beryl-cyber.conf; do
     grep -qxF "$f" /etc/sysupgrade.conf 2>/dev/null || echo "$f" >> /etc/sysupgrade.conf

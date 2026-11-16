@@ -40,13 +40,15 @@ case "$q" in
               (SELECT COUNT(*) FROM devices WHERE online = 1)      AS online,
               (SELECT COUNT(*) FROM devices WHERE status = 'pending') AS pending,
               (SELECT COUNT(*) FROM events  WHERE seen = 0 AND type = 'new_device') AS alerts,
+              (SELECT COALESCE(SUM(blocked), 0) FROM dns_queries WHERE day = date('now','localtime')) AS dns_blocked,
+              (SELECT COALESCE(SUM(count), 0)   FROM dns_queries WHERE day = date('now','localtime')) AS dns_total,
               strftime('%s','now')                                 AS now,
               $WL                                                  AS whitelist;")"
         ;;
     devices)
         reply "$(query_json "
             SELECT d.mac, d.hostname, d.alias, d.vendor, d.random_mac, d.last_ip,
-                   d.status, d.online, d.first_seen, d.last_seen,
+                   d.status, d.online, d.first_seen, d.last_seen, d.private,
                    COALESCE((SELECT rx FROM traffic t WHERE t.mac = d.mac AND t.day = date('now','localtime')), 0) AS rx_today,
                    COALESCE((SELECT tx FROM traffic t WHERE t.mac = d.mac AND t.day = date('now','localtime')), 0) AS tx_today,
                    COALESCE((SELECT SUM(rx + tx) FROM traffic t WHERE t.mac = d.mac
@@ -90,6 +92,14 @@ case "$q" in
             FROM destinations d JOIN ip_info i ON i.ip = d.ip
             WHERE d.day = date('now','localtime') AND i.country IS NOT NULL
             GROUP BY i.country ORDER BY total DESC;")"
+        ;;
+    dns)
+        [ -n "$mac" ] || { reply '{"error":"MAC invalide"}'; exit 0; }
+        reply "$(query_json "
+            SELECT domain, SUM(count) AS count, SUM(blocked) AS blocked
+            FROM dns_queries
+            WHERE mac = '$mac' AND day = date('now','localtime')
+            GROUP BY domain ORDER BY SUM(count) DESC LIMIT 40;")"
         ;;
     destinations)
         [ -n "$mac" ] || { reply '{"error":"MAC invalide"}'; exit 0; }

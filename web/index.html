@@ -105,6 +105,8 @@
     <div class="card"><div class="label">En ligne</div><div class="value" id="c-online">–</div></div>
     <div class="card"><div class="label">Appareils connus</div><div class="value" id="c-total">–</div></div>
     <div class="card"><div class="label">En attente d'approbation</div><div class="value" id="c-pending">–</div></div>
+    <div class="card"><div class="label">Requêtes bloquées aujourd'hui (pubs, pistage)</div><div class="value" id="c-blocked">–</div>
+      <div class="label" id="c-blocked-pct"></div></div>
     <div class="card alert"><div class="label">Nouveaux appareils non lus</div><div class="value" id="c-alerts">–</div>
       <button id="mark-seen" hidden>Tout marquer comme lu</button></div>
   </div>
@@ -151,6 +153,16 @@
       <table>
         <thead><tr><th>Organisation</th><th>Pays</th><th>Adresse</th><th>Service</th><th>Reçu / envoyé</th><th></th><th>Connexions</th></tr></thead>
         <tbody id="dest-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="dns-section" style="display:none">
+    <h2 id="dns-title">Sites demandés (DNS)</h2>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Domaine</th><th>Requêtes</th><th>Bloquées</th><th></th></tr></thead>
+        <tbody id="dns-body"></tbody>
       </table>
     </div>
   </section>
@@ -266,6 +278,10 @@ function renderSummary(s) {
   document.getElementById("c-total").textContent = s.total;
   document.getElementById("c-pending").textContent = s.pending;
   document.getElementById("c-alerts").textContent = s.alerts;
+  document.getElementById("c-blocked").textContent = Number(s.dns_blocked || 0).toLocaleString("fr-BE");
+  const tot = Number(s.dns_total || 0);
+  document.getElementById("c-blocked-pct").textContent =
+    tot ? Math.round(100 * Number(s.dns_blocked) / tot) + " % des " + tot.toLocaleString("fr-BE") + " requêtes DNS" : "";
   document.getElementById("mark-seen").hidden = !(Number(s.alerts) > 0);
   const mode = document.getElementById("wl-mode");
   const on = Number(s.whitelist) === 1;
@@ -288,6 +304,7 @@ function renderDevices(list) {
     name.append(document.createTextNode(d.alias || d.hostname || "Appareil inconnu"));
     if (d.random_mac) name.append(el("span", "tag", "MAC aléatoire"));
     else if (d.vendor) name.append(el("span", "tag", d.vendor));
+    if (Number(d.private)) name.append(el("span", "tag approved", "Privé"));
     const edit = el("button", "icon", "✎");
     edit.title = "Renommer";
     edit.addEventListener("click", () => startRename(name, d));
@@ -306,6 +323,10 @@ function renderDevices(list) {
     const t = el("button", "", "Trafic");
     t.addEventListener("click", () => showDestinations(d.mac, d.alias || d.hostname || d.mac));
     box.append(t);
+    const pv = el("button", "", Number(d.private) ? "Rendre visible" : "Privé");
+    pv.title = Number(d.private) ? "Réactiver l'historique DNS" : "Ne plus enregistrer les sites visités (l'historique existant est effacé)";
+    pv.addEventListener("click", () => act({ action: "private", mac: d.mac, value: Number(d.private) ? 0 : 1 }));
+    box.append(pv);
     if (d.status !== "approved") {
       const b = el("button", "ok", "Approuver");
       b.addEventListener("click", () => act({ action: "status", mac: d.mac, value: "approved" }));
@@ -570,7 +591,35 @@ async function showDestinations(mac, name) {
   } catch (err) {
     showError("Impossible de lire les destinations : " + err.message);
   }
+  showDns(mac, name);
   section.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+async function showDns(mac, name) {
+  const sec = document.getElementById("dns-section");
+  const body = document.getElementById("dns-body");
+  sec.style.display = "block";
+  document.getElementById("dns-title").textContent = "Sites demandés aujourd'hui (DNS) : " + name;
+  body.replaceChildren();
+  try {
+    const list = await get("dns&mac=" + encodeURIComponent(mac));
+    if (!list.length) {
+      const tr = el("tr");
+      const td = el("td", "muted", "Aucune requête enregistrée (appareil privé, ou pas encore de données).");
+      td.colSpan = 4; tr.append(td); body.append(tr); return;
+    }
+    const max = Math.max(1, ...list.map(x => Number(x.count)));
+    for (const q of list) {
+      const tr = el("tr");
+      const tag = el("td");
+      if (Number(q.blocked)) tag.append(el("span", "tag blocked", "Bloqué"));
+      const barCell = el("td");
+      const bar = el("div", "bar"); bar.style.width = Math.max(2, Math.round(120 * q.count / max)) + "px";
+      barCell.append(bar);
+      tr.append(el("td", "mono", q.domain), el("td", "", String(q.count)), tag, barCell);
+      body.append(tr);
+    }
+  } catch (err) { showError("Impossible de lire l'historique DNS : " + err.message); }
 }
 
 async function refresh() {
@@ -592,6 +641,7 @@ async function refresh() {
 document.getElementById("dest-close").addEventListener("click", () => {
   destMac = null;
   document.getElementById("dest-section").style.display = "none";
+  document.getElementById("dns-section").style.display = "none";
 });
 
 document.getElementById("mark-seen").addEventListener("click", () => act({ action: "seen" }));

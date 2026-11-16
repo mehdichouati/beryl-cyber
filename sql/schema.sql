@@ -96,3 +96,16 @@ CREATE TABLE IF NOT EXISTS ip_info (
     org      TEXT,                          -- organisation (Google LLC, Meta...)
     updated  INTEGER NOT NULL
 );
+
+-- Historique DNS : noms de domaine demandés par appareil et par jour (V3)
+-- Conservé 7 jours. Les appareils marqués "privés" ne sont pas historisés.
+CREATE TABLE IF NOT EXISTS dns_queries (
+    mac      TEXT NOT NULL REFERENCES devices(mac) ON DELETE CASCADE,
+    day      TEXT NOT NULL,                 -- AAAA-MM-JJ
+    domain   TEXT NOT NULL,
+    count    INTEGER NOT NULL DEFAULT 0,    -- nombre de requêtes
+    blocked  INTEGER NOT NULL DEFAULT 0,    -- dont bloquées (publicité, pistage)
+    last_ts  INTEGER NOT NULL,
+    PRIMARY KEY (mac, day, domain)
+);
+CREATE INDEX IF NOT EXISTS idx_dns_day ON dns_queries (day);

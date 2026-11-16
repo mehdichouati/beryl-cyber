@@ -4,6 +4,7 @@
 #   POST /cgi-bin/action.sh   corps : action=...&mac=...&value=...
 #     action=status  value=approved|blocked|pending   statut d'un appareil (liste blanche)
 #     action=rename  value=<nom>                      nom affiché (vide = nom d'origine)
+#     action=private value=0|1                        appareil privé (pas d'historique DNS)
 #     action=seen                                     marque toutes les alertes comme lues
 #
 # Protections :
@@ -75,6 +76,15 @@ case "$action" in
             sql "BEGIN; UPDATE devices SET alias = '$alias' WHERE mac = '$mac';
                  INSERT INTO events (ts, mac, type, detail) VALUES ($now, '$mac', 'renamed', '$alias'); COMMIT;"
         fi || reply "500 Internal Server Error" '{"error":"écriture impossible"}'
+        ;;
+    private)
+        # Appareil privé : plus d'historique DNS, et l'historique existant est effacé
+        valid_mac "$mac" && device_exists "$mac" || reply "404 Not Found" '{"error":"appareil inconnu"}'
+        case "$value" in
+            1) sql "BEGIN; UPDATE devices SET private = 1 WHERE mac = '$mac'; DELETE FROM dns_queries WHERE mac = '$mac'; COMMIT;" ;;
+            0) sql "UPDATE devices SET private = 0 WHERE mac = '$mac';" ;;
+            *) reply "400 Bad Request" '{"error":"valeur invalide"}' ;;
+        esac || reply "500 Internal Server Error" '{"error":"écriture impossible"}'
         ;;
     seen)
         sql "UPDATE events SET seen = 1 WHERE seen = 0;" \

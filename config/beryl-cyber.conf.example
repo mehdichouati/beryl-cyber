@@ -35,3 +35,6 @@ DISCORD_ADMIN_ID=
 
 # Durée de conservation du détail des destinations (jours)
 DEST_RETENTION_DAYS=30
+
+# Durée de conservation de l'historique DNS (jours)
+DNS_RETENTION_DAYS=7

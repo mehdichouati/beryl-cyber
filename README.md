@@ -30,9 +30,11 @@ inventaire des appareils, historique de présence, alertes et tableau de bord we
 - [x] Notifications Discord et approbation à distance par réaction
 
 ### V3 : DNS et confidentialité
-- [ ] Historique DNS par appareil, catégories, filtrage
-- [ ] DNS forcé
-- [ ] Consentement, durée de conservation limitée
+- [x] Historique DNS par appareil (AdGuard Home), conservé 7 jours
+- [x] Filtrage des publicités et du pistage pour toute la maison
+- [x] Mode « appareil privé » : pas d'historique, effacement de l'existant
+- [ ] DNS forcé (redirection de tout le DNS, blocage du DNS chiffré)
+- [ ] Information des occupants
 
 ## Installation
 

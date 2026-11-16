@@ -28,6 +28,14 @@ init_db() {
     mkdir -p "$DATA_DIR" || return 1
     [ -f "$DB" ] || log "création de la base : $DB"
     sqlite3 "$DB" < "$APP_DIR/sql/schema.sql" >/dev/null || return 1
+    migrate
+}
+
+# Colonnes ajoutées après la création de la base (CREATE TABLE IF NOT EXISTS ne modifie
+# pas une table existante) : ajoutées seulement si elles manquent.
+migrate() {
+    sqlite3 "$DB" "PRAGMA table_info(devices);" | grep -q '|private|' \
+        || sqlite3 "$DB" "ALTER TABLE devices ADD COLUMN private INTEGER NOT NULL DEFAULT 0;"
 }
 
 # Lit la table de voisinage IPv4 de l'interface LAN.
@@ -162,6 +170,8 @@ if [ "$1" = "--loop" ]; then
         [ -x "$APP_DIR/router/bin/traffic.sh" ] && "$APP_DIR/router/bin/traffic.sh"
         # Destinations du trafic
         [ -x "$APP_DIR/router/bin/destinations.sh" ] && "$APP_DIR/router/bin/destinations.sh"
+        # Historique DNS (AdGuard Home)
+        [ -x "$APP_DIR/router/bin/dns.sh" ] && "$APP_DIR/router/bin/dns.sh"
         # Entretien : mises à jour mensuelles des bases de référence
         [ -x "$APP_DIR/router/bin/maintenance.sh" ] && "$APP_DIR/router/bin/maintenance.sh"
         # Notifications Discord (sans effet si Discord n'est pas configuré)
